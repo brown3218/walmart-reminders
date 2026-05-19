@@ -2,6 +2,14 @@ import { normalizeText } from "../parser/groceryParser.js";
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
 import type { ProductCandidateInput } from "../db/database.js";
 import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
+import { extractWalmartProductId } from "./urls.js";
+
+export type RawWalmartSearchResult = {
+  title: string;
+  url: string;
+  priceText: string | null;
+  imageUrl: string | null;
+};
 
 export async function searchWalmartProducts(profileDir: string, query: string): Promise<ProductCandidateInput[]> {
   const context = await openPersistentWalmartSession(profileDir);
@@ -29,27 +37,32 @@ export async function searchWalmartProducts(profileDir: string, query: string): 
         .filter((item) => item.title.length > 3 && item.url.includes("/ip/"))
     );
 
-    const seen = new Set<string>();
-    const candidates: ProductCandidateInput[] = [];
-    for (const item of raw) {
-      if (seen.has(item.url)) continue;
-      seen.add(item.url);
-      candidates.push({
-        title: item.title.replace(/\s+/g, " ").trim(),
-        url: item.url,
-        priceText: item.priceText,
-        sizeText: null,
-        availabilityText: null,
-        imageUrl: item.imageUrl,
-        confidence: scoreSearchResult(query, item.title),
-        source: "walmart_search"
-      });
-      if (candidates.length >= 5) break;
-    }
-    return candidates;
+    return buildSearchCandidates(query, raw);
   } finally {
     await context.close();
   }
+}
+
+export function buildSearchCandidates(query: string, raw: RawWalmartSearchResult[]): ProductCandidateInput[] {
+  const seen = new Set<string>();
+  const candidates: ProductCandidateInput[] = [];
+  for (const item of raw) {
+    if (seen.has(item.url)) continue;
+    seen.add(item.url);
+    candidates.push({
+      walmartProductId: extractWalmartProductId(item.url),
+      title: item.title.replace(/\s+/g, " ").trim(),
+      url: item.url,
+      priceText: item.priceText,
+      sizeText: null,
+      availabilityText: null,
+      imageUrl: item.imageUrl,
+      confidence: scoreSearchResult(query, item.title),
+      source: "walmart_search"
+    });
+    if (candidates.length >= 5) break;
+  }
+  return candidates;
 }
 
 function scoreSearchResult(query: string, title: string): number {
