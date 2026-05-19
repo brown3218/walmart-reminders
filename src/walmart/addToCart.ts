@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
 import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
 
@@ -11,41 +12,41 @@ export type AddToCartTarget = {
   quantity: number | null;
 };
 
-type QuantityButton = {
-  isVisible: (options: { timeout: number }) => Promise<boolean>;
-  click: () => Promise<void>;
-};
-
-type QuantityPage = {
-  getByRole: (role: "button", options: { name: RegExp }) => { first: () => QuantityButton };
-};
+type QuantityPage = Pick<Page, "getByRole">;
+type AddToCartPage = Pick<Page, "getByRole" | "locator" | "waitForTimeout">;
 
 export async function addApprovedItemToCart(profileDir: string, target: AddToCartTarget): Promise<AddToCartResult> {
   const context = await openPersistentWalmartSession(profileDir);
   const page = context.pages()[0] ?? (await context.newPage());
   try {
     await page.goto(target.productUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(2000);
-    const body = await page.locator("body").innerText({ timeout: 5000 });
-    if (detectWalmartManualAction(body)) {
-      return { status: "needs_manual_action", message: walmartManualActionMessage("cart_add") };
-    }
-
-    const addButton = page
-      .getByRole("button", { name: /add|add to cart/i })
-      .or(page.locator('button:has-text("Add")'))
-      .first();
-    if (!(await addButton.isVisible({ timeout: 5000 }).catch(() => false))) {
-      return { status: "failed", message: "No visible Add button was found." };
-    }
-
-    await addButton.click();
-    await page.waitForTimeout(2500);
-    await setRequestedQuantity(page, target.quantity);
-    return { status: "added", message: "Clicked Walmart add button; verify cart if needed." };
+    return clickAddToCartOnPage(page, target);
   } finally {
     await context.close();
   }
+}
+
+export async function clickAddToCartOnPage(page: AddToCartPage, target: AddToCartTarget): Promise<AddToCartResult> {
+  await page.waitForTimeout(2000);
+  const body = await page.locator("body").innerText?.({ timeout: 5000 });
+  if (body && detectWalmartManualAction(body)) {
+    return { status: "needs_manual_action", message: walmartManualActionMessage("cart_add") };
+  }
+
+  const roleButton = page.getByRole("button", { name: /add|add to cart/i });
+  const addButton = roleButton.or(page.locator('button:has-text("Add")')).first();
+  if (!(await addButton.isVisible({ timeout: 5000 }).catch(() => false))) {
+    return { status: "failed", message: "No visible Add button was found." };
+  }
+
+  await addButton.click();
+  await page.waitForTimeout(2500);
+  const afterAddBody = await page.locator("body").innerText?.({ timeout: 5000 });
+  if (afterAddBody && detectWalmartManualAction(afterAddBody)) {
+    return { status: "needs_manual_action", message: walmartManualActionMessage("cart_add") };
+  }
+  await setRequestedQuantity(page, target.quantity);
+  return { status: "added", message: "Clicked Walmart add button; verify cart if needed." };
 }
 
 async function setRequestedQuantity(
