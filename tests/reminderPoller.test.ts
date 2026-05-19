@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { startReminderPoller } from "../src/reminders/poller.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { readReminderSnapshot, startReminderPoller } from "../src/reminders/poller.js";
 
 describe("Reminder poller", () => {
   afterEach(() => {
@@ -35,5 +38,29 @@ describe("Reminder poller", () => {
     expect(calls).toBe(2);
 
     clearInterval(timer);
+  });
+
+  it("falls back to AppleScript when built Swift reminderctl cannot read reminders", async () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "walmart-reminder-poller-"));
+    const helperPath = path.join(projectRoot, "apps/reminder-watcher-swift/.build/debug/reminderctl");
+    fs.mkdirSync(path.dirname(helperPath), { recursive: true });
+    fs.writeFileSync(helperPath, "#!/bin/sh\n", "utf8");
+
+    const result = await readReminderSnapshot(
+      { reminders: { listNames: ["Walmart"] } } as never,
+      {
+        projectRoot,
+        execFile: async (command) => {
+          if (command === helperPath) throw new Error("Swift reminderctl failed");
+          return { stdout: "r1\tlist-1\tWalmart\tMilk\t\tfalse\n" };
+        }
+      }
+    );
+
+    expect(result).toMatchObject({
+      reminders: [{ externalId: "r1", listId: "list-1", listName: "Walmart", title: "Milk", completed: false }],
+      skipped: 0,
+      helper: "applescript"
+    });
   });
 });

@@ -66,6 +66,12 @@ reminders:
 
 If `npm run doctor` reports `No configured Reminders list was found`, create one of the configured lists in Apple Reminders or update `config.yaml`.
 
+The app prefers the Swift/EventKit `reminderctl` helper when it has been built, and falls back to AppleScript if it is not available:
+
+```sh
+npm run reminders:build
+```
+
 ## Walmart Session
 
 Open a visible Walmart browser profile:
@@ -100,6 +106,7 @@ npm test
 npm run doctor
 npm run url
 npm run launchd:install
+npm run reminders:build
 npm run walmart:login
 npm run walmart:sync
 npm run walmart:orders

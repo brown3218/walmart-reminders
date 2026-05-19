@@ -4,6 +4,7 @@ import type { AppDatabase, ReminderInput } from "../db/database.js";
 const reminderSnapshotSchema = z.object({
   externalId: z.string(),
   listId: z.string(),
+  listName: z.string().nullable().optional(),
   title: z.string(),
   notes: z.string().nullable().optional(),
   completed: z.boolean()
@@ -15,8 +16,14 @@ export type ReminderIngestResult = {
 };
 
 export function ingestReminderJsonLines(db: AppDatabase, stdout: string): ReminderIngestResult {
-  let ingested = 0;
-  let skipped = 0;
+  const reminders = parseReminderJsonLines(stdout);
+  for (const reminder of reminders) db.upsertReminder(reminder);
+  const nonEmptyLines = stdout.split(/\r?\n/).filter((line) => line.trim()).length;
+  return { ingested: reminders.length, skipped: nonEmptyLines - reminders.length };
+}
+
+export function parseReminderJsonLines(stdout: string): ReminderInput[] {
+  const reminders: ReminderInput[] = [];
 
   for (const line of stdout.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -24,25 +31,21 @@ export function ingestReminderJsonLines(db: AppDatabase, stdout: string): Remind
     try {
       json = JSON.parse(line);
     } catch {
-      skipped += 1;
       continue;
     }
     const parsed = reminderSnapshotSchema.safeParse(json);
-    if (!parsed.success) {
-      skipped += 1;
-      continue;
-    }
-    db.upsertReminder({
+    if (!parsed.success) continue;
+    reminders.push({
       externalId: parsed.data.externalId,
       listId: parsed.data.listId,
+      listName: parsed.data.listName ?? null,
       title: parsed.data.title,
       notes: parsed.data.notes ?? null,
       completed: parsed.data.completed
     });
-    ingested += 1;
   }
 
-  return { ingested, skipped };
+  return reminders;
 }
 
 export function ingestReminderTsvLines(db: AppDatabase, stdout: string): ReminderIngestResult {

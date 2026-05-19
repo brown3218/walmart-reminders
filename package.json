@@ -10,6 +10,7 @@
     "url": "tsx scripts/print-url.ts",
     "doctor": "tsx scripts/doctor.ts",
     "launchd:install": "tsx scripts/install-launchagent.ts",
+    "reminders:build": "swift build --package-path apps/reminder-watcher-swift",
     "walmart:login": "tsx scripts/open-walmart-session.ts",
     "walmart:sync": "tsx scripts/sync-walmart-catalog.ts",
     "walmart:orders": "tsx scripts/sync-walmart-orders.ts",

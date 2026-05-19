@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { loadConfig, resolveProjectPath } from "../src/config/config.js";
 import { createDatabase } from "../src/db/database.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "../src/network/urls.js";
-import { REMINDERS_HELPER_TIMEOUT_MS, buildReadReminderArgs } from "../src/reminders/helper.js";
+import { readReminderSnapshot } from "../src/reminders/poller.js";
 
 type Check = {
   name: string;
@@ -40,12 +39,12 @@ try {
 }
 
 try {
-  execFileSync("osascript", buildReadReminderArgs("./scripts/read-reminders.applescript", config.reminders.listNames), {
-    cwd: process.cwd(),
-    timeout: REMINDERS_HELPER_TIMEOUT_MS,
-    maxBuffer: 1024 * 256
+  const result = await readReminderSnapshot(config);
+  checks.push({
+    name: "Reminders helper",
+    ok: true,
+    detail: `${result.helper === "swift" ? "Swift reminderctl" : "AppleScript"} helper ran for ${config.reminders.listNames.join(", ")}`
   });
-  checks.push({ name: "Reminders helper", ok: true, detail: `AppleScript helper ran for ${config.reminders.listNames.join(", ")}` });
 } catch (error) {
   checks.push({
     name: "Reminders helper",

@@ -3,11 +3,28 @@ import { promisify } from "node:util";
 import type pino from "pino";
 import type { AppConfig } from "../config/config.js";
 import type { AppDatabase } from "../db/database.js";
-import { parseReminderTsvLines } from "./ingest.js";
-import { REMINDERS_HELPER_TIMEOUT_MS, buildReadReminderArgs } from "./helper.js";
+import { parseReminderJsonLines, parseReminderTsvLines } from "./ingest.js";
+import {
+  REMINDERS_HELPER_TIMEOUT_MS,
+  buildAppleScriptReadReminderCommand,
+  buildReadReminderCommand,
+  type ReminderReadCommand
+} from "./helper.js";
 import { applyReminderSnapshot } from "./snapshot.js";
 
 const execFileAsync = promisify(execFile);
+
+type ReminderExecFile = (
+  command: string,
+  args: string[],
+  options: { cwd: string; timeout: number; maxBuffer: number }
+) => Promise<{ stdout: string | Buffer }>;
+
+export type ReadReminderSnapshotResult = {
+  reminders: ReturnType<typeof parseReminderTsvLines>;
+  skipped: number;
+  helper: "swift" | "applescript";
+};
 
 export type ReminderPollerOptions = {
   db: AppDatabase;
@@ -41,13 +58,42 @@ export function startReminderPoller({ db, config, logger, afterPoll, pollOnce = 
 }
 
 export async function pollRemindersOnce(db: AppDatabase, config: AppConfig): Promise<{ ingested: number; skipped: number }> {
-  const { stdout } = await execFileAsync("osascript", buildReadReminderArgs("./scripts/read-reminders.applescript", config.reminders.listNames), {
-    cwd: process.cwd(),
+  const { reminders, skipped } = await readReminderSnapshot(config);
+  applyReminderSnapshot(db, reminders);
+  return { ingested: reminders.length, skipped };
+}
+
+export async function readReminderSnapshot(
+  config: AppConfig,
+  options: { projectRoot?: string; execFile?: ReminderExecFile } = {}
+): Promise<ReadReminderSnapshotResult> {
+  const projectRoot = options.projectRoot ?? process.cwd();
+  const run = options.execFile ?? (execFileAsync as ReminderExecFile);
+  const primary = buildReadReminderCommand(projectRoot, config.reminders.listNames);
+  try {
+    return await runReadCommand(primary, projectRoot, run);
+  } catch (error) {
+    if (primary.format !== "jsonl") throw error;
+    return runReadCommand(buildAppleScriptReadReminderCommand(config.reminders.listNames), projectRoot, run);
+  }
+}
+
+async function runReadCommand(
+  command: ReminderReadCommand,
+  projectRoot: string,
+  execFileRunner: ReminderExecFile
+): Promise<ReadReminderSnapshotResult> {
+  const { stdout } = await execFileRunner(command.command, command.args, {
+    cwd: projectRoot,
     timeout: REMINDERS_HELPER_TIMEOUT_MS,
     maxBuffer: 1024 * 1024
   });
-  const reminders = parseReminderTsvLines(stdout);
-  const nonEmptyLines = stdout.split(/\r?\n/).filter((line) => line.trim()).length;
-  applyReminderSnapshot(db, reminders);
-  return { ingested: reminders.length, skipped: nonEmptyLines - reminders.length };
+  const output = String(stdout);
+  const reminders = command.format === "jsonl" ? parseReminderJsonLines(output) : parseReminderTsvLines(output);
+  const nonEmptyLines = output.split(/\r?\n/).filter((line) => line.trim()).length;
+  return {
+    reminders,
+    skipped: nonEmptyLines - reminders.length,
+    helper: command.format === "jsonl" ? "swift" : "applescript"
+  };
 }

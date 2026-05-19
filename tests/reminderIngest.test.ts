@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDatabase } from "../src/db/database.js";
-import { ingestReminderJsonLines } from "../src/reminders/ingest.js";
+import { ingestReminderJsonLines, parseReminderJsonLines } from "../src/reminders/ingest.js";
 import { ingestReminderTsvLines } from "../src/reminders/ingest.js";
 
 describe("ingestReminderJsonLines", () => {
@@ -23,6 +23,30 @@ describe("ingestReminderJsonLines", () => {
 
     expect(result).toMatchObject({ ingested: 1, skipped: 1 });
     expect(db.listApprovals()[0]).toMatchObject({ raw_text: "bananas" });
+  });
+
+  it("parses Swift reminderctl JSON lines with list names for snapshot diffing", () => {
+    expect(
+      parseReminderJsonLines(
+        JSON.stringify({
+          externalId: "abc",
+          listId: "list-1",
+          listName: "Walmart shopping list",
+          title: "strawberries",
+          notes: null,
+          completed: false
+        })
+      )
+    ).toEqual([
+      {
+        externalId: "abc",
+        listId: "list-1",
+        listName: "Walmart shopping list",
+        title: "strawberries",
+        notes: null,
+        completed: false
+      }
+    ]);
   });
 });
 
