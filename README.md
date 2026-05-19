@@ -114,7 +114,7 @@ npm run walmart:orders
 npm start
 ```
 
-`npm run doctor` checks Node, config, dashboard PIN safety, SQLite, Walmart session/manual-action status, Reminders helper status, Walmart profile directory, dashboard reachability, and LAN URL detection.
+`npm run doctor` checks Node, config presence, deprecated config keys, dashboard PIN safety, SQLite, Walmart session/manual-action status, Reminders helper status, Walmart profile directory, dashboard reachability, and LAN URL detection.
 
 ## LaunchAgent
 

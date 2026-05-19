@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { formatDashboardPinDoctorCheck, loadConfig, resolveProjectPath } from "../src/config/config.js";
+import {
+  formatDashboardPinDoctorCheck,
+  formatDeprecatedConfigDoctorCheck,
+  loadConfig,
+  resolveProjectPath
+} from "../src/config/config.js";
 import { createDatabase } from "../src/db/database.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "../src/network/urls.js";
 import { readReminderSnapshot } from "../src/reminders/poller.js";
@@ -27,6 +32,9 @@ checks.push({
   ok: fs.existsSync(configPath) || fs.existsSync("config.example.yaml"),
   detail: fs.existsSync(configPath) ? `${configPath} exists` : "config.yaml missing; config.example.yaml is available"
 });
+if (fs.existsSync(configPath)) {
+  checks.push({ name: "Config keys", ...formatDeprecatedConfigDoctorCheck(fs.readFileSync(configPath, "utf8")) });
+}
 checks.push({ name: "Dashboard PIN", ...formatDashboardPinDoctorCheck(config.dashboard.pin) });
 
 const dbPath = resolveProjectPath(config.database.path);

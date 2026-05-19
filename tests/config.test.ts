@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { formatDashboardPinDoctorCheck, loadConfig } from "../src/config/config.js";
+import { formatDashboardPinDoctorCheck, formatDeprecatedConfigDoctorCheck, loadConfig } from "../src/config/config.js";
 
 describe("configuration", () => {
   it("uses catalogSyncMinutes as the Walmart catalog interval config", () => {
@@ -31,6 +31,28 @@ describe("configuration", () => {
     expect(formatDashboardPinDoctorCheck("812846")).toEqual({
       ok: true,
       detail: "dashboard PIN is configured"
+    });
+  });
+
+  it("warns when config still uses deprecated Walmart sync settings", () => {
+    expect(
+      formatDeprecatedConfigDoctorCheck(`
+        walmart:
+          reorderSyncHours: 12
+      `)
+    ).toEqual({
+      ok: false,
+      detail: "deprecated config key walmart.reorderSyncHours is ignored; use walmart.catalogSyncMinutes and walmart.orderSyncMinutes"
+    });
+    expect(
+      formatDeprecatedConfigDoctorCheck(`
+        walmart:
+          catalogSyncMinutes: 60
+          orderSyncMinutes: 60
+      `)
+    ).toEqual({
+      ok: true,
+      detail: "no deprecated config keys found"
     });
   });
 });

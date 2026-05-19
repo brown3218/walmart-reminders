@@ -82,3 +82,15 @@ export function formatDashboardPinDoctorCheck(pin: string | null): { ok: boolean
   }
   return { ok: true, detail: "dashboard PIN is configured" };
 }
+
+export function formatDeprecatedConfigDoctorCheck(configText: string): { ok: boolean; detail: string } {
+  const parsed = YAML.parse(configText) as { walmart?: { reorderSyncHours?: unknown } } | null;
+  if (parsed?.walmart && Object.prototype.hasOwnProperty.call(parsed.walmart, "reorderSyncHours")) {
+    return {
+      ok: false,
+      detail:
+        "deprecated config key walmart.reorderSyncHours is ignored; use walmart.catalogSyncMinutes and walmart.orderSyncMinutes"
+    };
+  }
+  return { ok: true, detail: "no deprecated config keys found" };
+}
