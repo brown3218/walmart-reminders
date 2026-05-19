@@ -97,6 +97,7 @@ npm run build
 npm test
 npm run doctor
 npm run url
+npm run launchd:install
 npm run walmart:login
 npm run walmart:sync
 npm run walmart:orders
@@ -111,7 +112,8 @@ Build once, then install the LaunchAgent:
 
 ```sh
 npm run build
-cp launchd/com.local.walmart-reminders.plist ~/Library/LaunchAgents/
+npm run launchd:install
+launchctl bootout gui/$UID ~/Library/LaunchAgents/com.local.walmart-reminders.plist 2>/dev/null || true
 launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.walmart-reminders.plist
 launchctl kickstart -k gui/$UID/com.local.walmart-reminders
 ```
@@ -123,7 +125,7 @@ var/logs/launchd.out.log
 var/logs/launchd.err.log
 ```
 
-The included plist uses this checkout path as an example. If you move the repo, update `WorkingDirectory`, `ProgramArguments`, `StandardOutPath`, and `StandardErrorPath`.
+`npm run launchd:install` writes a plist with paths for the current checkout, so rerun it after moving or recloning the repo.
 
 ## Dashboard
 

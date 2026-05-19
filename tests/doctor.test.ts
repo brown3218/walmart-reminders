@@ -16,6 +16,6 @@ describe("doctor reminders helper", () => {
   });
 
   it("allows slower Apple Reminders reads on first run", () => {
-    expect(REMINDERS_HELPER_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+    expect(REMINDERS_HELPER_TIMEOUT_MS).toBeGreaterThanOrEqual(90_000);
   });
 });

@@ -14,16 +14,25 @@ export type ReminderPollerOptions = {
   config: AppConfig;
   logger: pino.Logger;
   afterPoll?: (result: { ingested: number; skipped: number }) => void | Promise<void>;
+  pollOnce?: (db: AppDatabase, config: AppConfig) => Promise<{ ingested: number; skipped: number }>;
 };
 
-export function startReminderPoller({ db, config, logger, afterPoll }: ReminderPollerOptions): NodeJS.Timeout {
+export function startReminderPoller({ db, config, logger, afterPoll, pollOnce = pollRemindersOnce }: ReminderPollerOptions): NodeJS.Timeout {
+  let inFlight = false;
   const run = async () => {
+    if (inFlight) {
+      logger.warn("reminders poll skipped because previous poll is still running");
+      return;
+    }
+    inFlight = true;
     try {
-      const result = await pollRemindersOnce(db, config);
+      const result = await pollOnce(db, config);
       await afterPoll?.(result);
       logger.info(result, "reminders poll complete");
     } catch (error) {
       logger.warn({ error: error instanceof Error ? error.message : String(error) }, "reminders poll failed");
+    } finally {
+      inFlight = false;
     }
   };
 
