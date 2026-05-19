@@ -168,10 +168,15 @@ export function createDatabase(path: string): AppDatabase {
 	      }
 
 	      const existing = raw
-	        .prepare("select id, status from grocery_items where reminder_id = ? order by id desc limit 1")
-	        .get(reminder.id) as { id: number; status: string } | undefined;
+	        .prepare("select id, status, raw_text from grocery_items where reminder_id = ? order by id desc limit 1")
+	        .get(reminder.id) as { id: number; status: string; raw_text: string } | undefined;
+	      const titleChanged = Boolean(existing && existing.raw_text !== input.title);
+	      if (existing && ["fulfilled", "deleted"].includes(existing.status)) {
+	        return;
+	      }
 	      if (
 	        existing &&
+	        !titleChanged &&
 	        ["auto_matched", "approved", "adding", "added_to_cart", "manual_action", "ordered", "fulfilled", "skipped"].includes(
 	          existing.status
 	        )
@@ -181,6 +186,10 @@ export function createDatabase(path: string): AppDatabase {
 
 	      const parsed = parseGroceryText(input.title);
 	      if (existing) {
+	        if (titleChanged) {
+	          raw.prepare("delete from product_candidates where grocery_item_id = ?").run(existing.id);
+	          raw.prepare("delete from chosen_products where grocery_item_id = ?").run(existing.id);
+	        }
 	        raw.prepare(
           `
           update grocery_items set
@@ -193,6 +202,8 @@ export function createDatabase(path: string): AppDatabase {
 	            status = 'parsed',
 	            cart_status = 'not_added',
 	            error_message = null,
+	            matched_at = null,
+	            approved_at = null,
 	            deleted_at = null,
 	            updated_at = @now
 	          where id = @id

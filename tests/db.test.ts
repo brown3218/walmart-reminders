@@ -55,6 +55,43 @@ describe("database reminder ingestion", () => {
     expect(row.status).toBe("approved");
   });
 
+  it("reparses edited approved reminder text for a fresh match", () => {
+    const db = createDatabase(":memory:");
+
+    db.upsertReminder({
+      externalId: "reminder-edit-approved",
+      listId: "walmart-list",
+      title: "milk",
+      notes: null,
+      completed: false
+    });
+    const item = db.listApprovals()[0];
+    db.approveItem({
+      itemId: Number(item.id),
+      url: "https://www.walmart.com/ip/milk",
+      title: "Usual Milk",
+      chosenBy: "dashboard"
+    });
+
+    db.upsertReminder({
+      externalId: "reminder-edit-approved",
+      listId: "walmart-list",
+      title: "eggs",
+      notes: null,
+      completed: false
+    });
+
+    expect(db.listItems()[0]).toMatchObject({
+      id: item.id,
+      raw_text: "eggs",
+      normalized_text: "eggs",
+      status: "parsed",
+      cart_status: "not_added",
+      chosen_title: null
+    });
+    expect(db.getChosenProduct(Number(item.id))).toBeNull();
+  });
+
   it("stores Walmart candidates and approves a specific candidate", () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({
