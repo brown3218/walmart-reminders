@@ -254,6 +254,10 @@
         display: grid;
         gap: 10px;
       }
+      .session-actions {
+        display: grid;
+        gap: 8px;
+      }
       .card-title {
         font-weight: 850;
       }
@@ -343,7 +347,10 @@
       <div class="session-card">
         <div class="card-title">Walmart login/session</div>
         <div class="card-copy" id="sessionMessage">The app reuses a local Playwright browser profile. If Walmart asks for login, verification, or a robot check, finish it manually on the Mac.</div>
-        <button class="action primary" id="openWalmart">Open Walmart Login Window on Mac</button>
+        <div class="session-actions">
+          <button class="action primary" id="openWalmart">Open Walmart Login Window on Mac</button>
+          <button class="action" id="resumeWalmart">I Finished Verification</button>
+        </div>
       </div>
 
       <section>
@@ -422,6 +429,7 @@
       });
       document.querySelector("#refreshButton").addEventListener("click", syncNow);
       document.querySelector("#openWalmart").addEventListener("click", () => request("/api/walmart/open-session", { method: "POST" }).then(load));
+      document.querySelector("#resumeWalmart").addEventListener("click", () => request("/api/walmart/resume-session", { method: "POST" }).then(load));
       document.querySelector("#approveCandidate").addEventListener("click", () => approve(currentItem));
       document.querySelector("#rejectCandidate").addEventListener("click", () => reject(currentItem));
       document.querySelector("#searchAlternatives").addEventListener("click", () => search(currentItem));

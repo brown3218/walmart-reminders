@@ -96,7 +96,8 @@ Manual verification policy:
 
 - Login, CAPTCHA, 2FA, robot checks, press-and-hold challenges, or security checks stop automation.
 - The dashboard shows `manual action`.
-- Use Open Walmart, finish the action yourself, then tap I Added It or Retry.
+- Use Open Walmart, finish the action yourself, then tap I Finished Verification to let scheduled sync resume.
+- For item-specific cart actions, tap I Added It if you handled the cart manually or Retry after verification is cleared.
 
 ## Commands
 
@@ -176,7 +177,7 @@ Complete login or verification in the opened browser. Do not try to automate aro
 
 ### CAPTCHA, 2FA, Robot, Or Press-And-Hold
 
-Automation stops and marks the item `manual action`. Use the dashboard's Open Walmart action, complete the step yourself, then tap I Added It or Retry.
+Automation stops and marks the Walmart session `manual action`. Use the dashboard's Open Walmart action, complete the step yourself, then tap I Finished Verification to clear the local pause flag. If an item was stopped mid-cart action, tap I Added It after handling it yourself or Retry after verification is cleared.
 
 ### Service Worker Not Available Over HTTP LAN
 
@@ -202,3 +203,4 @@ Implemented endpoints:
 - `POST /api/items/:id/mark-ordered`
 - `POST /api/items/:id/search`
 - `POST /api/walmart/open-session`
+- `POST /api/walmart/resume-session`

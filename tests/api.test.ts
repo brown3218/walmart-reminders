@@ -300,6 +300,52 @@ describe("dashboard API", () => {
     }
   });
 
+  it("lets the user resume scheduled Walmart automation after manual verification", async () => {
+    const db = createDatabase(":memory:");
+    db.updateWalmartSession("needs_manual_action", "Walmart verification required.", true);
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/walmart/resume-session`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(response.status).toBe(202);
+
+      expect(
+        db.raw.prepare("select status, error_message, needs_manual_action from walmart_session_state where id = 1").get()
+      ).toEqual({
+        status: "manual_action_cleared",
+        error_message: "Manual verification marked complete from dashboard. Scheduled Walmart automation may resume.",
+        needs_manual_action: 0
+      });
+      expect(
+        db.raw.prepare("select action, status, error_message from automation_runs order by id desc limit 1").get()
+      ).toEqual({
+        action: "manual_action_cleared",
+        status: "ok",
+        error_message: "Manual verification marked complete from dashboard. Scheduled Walmart automation may resume."
+      });
+
+      const history = await fetch(`${baseUrl}/api/history`, {
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      const body = await history.json();
+      expect(body.activity[0]).toMatchObject({
+        type: "automation",
+        action: "manual_action_cleared",
+        title: "Manual action cleared",
+        status: "ok"
+      });
+    } finally {
+      server.close();
+    }
+  });
+
   it("lets the user mark an item added manually after opening Walmart", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({

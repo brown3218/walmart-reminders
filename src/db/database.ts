@@ -974,6 +974,7 @@ function automationActionTitle(action: string): string {
   const words: Record<string, string> = {
     catalog_sync: "Catalog sync",
     order_check: "Order check",
+    manual_action_cleared: "Manual action cleared",
     add_to_cart: "Add to cart",
     remove_from_cart: "Remove from cart",
     fulfill_reminder: "Fulfill reminder"

@@ -39,6 +39,11 @@ describe("dashboard markup", () => {
     expect(dashboardHtml).toContain('"/api/sync/orders"');
   });
 
+  it("exposes a manual verification resume action in the Walmart session card", () => {
+    expect(dashboardHtml).toContain('id="resumeWalmart">I Finished Verification</button>');
+    expect(dashboardHtml).toContain('"/api/walmart/resume-session"');
+  });
+
   it("subscribes to server-sent dashboard events with a polling fallback", () => {
     expect(dashboardHtml).toContain("new EventSource(`/api/events?pin=${encodeURIComponent(pinInput.value)}`)");
     expect(dashboardHtml).toContain('events.addEventListener("status"');

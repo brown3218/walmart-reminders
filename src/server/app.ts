@@ -265,6 +265,13 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     res.status(202).json({ ok: true });
   });
 
+  app.post("/api/walmart/resume-session", requirePin(dashboardPin), (_req, res) => {
+    const message = "Manual verification marked complete from dashboard. Scheduled Walmart automation may resume.";
+    db.updateWalmartSession("manual_action_cleared", message, false);
+    db.recordAutomationRun("manual_action_cleared", "ok", message);
+    res.status(202).json({ ok: true });
+  });
+
   app.use(express.static(path.resolve(process.cwd(), "public")));
 
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
