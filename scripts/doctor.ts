@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { loadConfig, resolveProjectPath } from "../src/config/config.js";
 import { createDatabase } from "../src/db/database.js";
+import { REMINDERS_HELPER_TIMEOUT_MS, buildReminderHelperArgs } from "../src/doctor/reminders.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "../src/network/urls.js";
 
 type Check = {
@@ -39,13 +40,12 @@ try {
 }
 
 try {
-  const listNames = config.reminders.listNames.slice(0, 1);
-  execFileSync("osascript", ["./scripts/read-reminders.applescript", ...listNames], {
+  execFileSync("osascript", buildReminderHelperArgs("./scripts/read-reminders.applescript", config.reminders.listNames), {
     cwd: process.cwd(),
-    timeout: 10000,
+    timeout: REMINDERS_HELPER_TIMEOUT_MS,
     maxBuffer: 1024 * 256
   });
-  checks.push({ name: "Reminders helper", ok: true, detail: "AppleScript helper ran" });
+  checks.push({ name: "Reminders helper", ok: true, detail: `AppleScript helper ran for ${config.reminders.listNames.join(", ")}` });
 } catch (error) {
   checks.push({
     name: "Reminders helper",
