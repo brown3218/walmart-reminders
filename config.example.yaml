@@ -20,7 +20,6 @@ dashboard:
 walmart:
   profileDir: ./var/walmart-profile
   mode: auto_previous_only
-  reorderSyncHours: 12
   catalogSyncMinutes: 60
   orderSyncMinutes: 60
   autoAddThreshold: 0.92

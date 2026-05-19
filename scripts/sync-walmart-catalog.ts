@@ -12,7 +12,7 @@ const db = createDatabase(dbPath);
 
 try {
   const result = await runWalmartCatalogSync({ db, config, logger });
-  console.log(`Captured ${result.candidates} Walmart reorder candidates.`);
+  console.log(`Captured ${result.candidates} Walmart catalog candidates.`);
   console.log(`Matched ${result.matches.autoMatched}, proposed ${result.matches.needsReview}, no match ${result.matches.noMatch}.`);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

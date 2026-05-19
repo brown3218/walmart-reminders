@@ -26,7 +26,6 @@ const configSchema = z.object({
   walmart: z.object({
     profileDir: z.string().default("./var/walmart-profile"),
     mode: z.enum(["manual", "auto_previous_only", "trusted_only"]).default("auto_previous_only"),
-    reorderSyncHours: z.number().positive().default(12),
     catalogSyncMinutes: z.number().positive().default(60),
     orderSyncMinutes: z.number().positive().default(60),
     autoAddThreshold: z.number().min(0).max(1).default(0.92),
@@ -56,7 +55,6 @@ export function loadConfig(configPath = process.env.WALMART_REMINDERS_CONFIG ?? 
     walmart: {
       profileDir: "./var/walmart-profile",
       mode: "auto_previous_only",
-      reorderSyncHours: 12,
       catalogSyncMinutes: 60,
       orderSyncMinutes: 60,
       autoAddThreshold: 0.92,
