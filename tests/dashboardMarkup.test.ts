@@ -4,6 +4,28 @@ import { describe, expect, it } from "vitest";
 const dashboardHtml = fs.readFileSync("public/index.html", "utf8");
 
 describe("dashboard markup", () => {
+  it("uses PNG PWA and Apple touch icons for iPhone Home Screen compatibility", () => {
+    const manifest = JSON.parse(fs.readFileSync("public/manifest.webmanifest", "utf8")) as {
+      icons: Array<{ src: string; sizes: string; type: string }>;
+    };
+
+    expect(dashboardHtml).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
+    expect(fs.existsSync("public/apple-touch-icon.png")).toBe(true);
+    expect(
+      manifest.icons.map((icon) => ({
+        src: icon.src,
+        sizes: icon.sizes,
+        type: icon.type
+      }))
+    ).toEqual([
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png" }
+    ]);
+    for (const icon of manifest.icons) {
+      expect(fs.existsSync(`public${icon.src}`)).toBe(true);
+    }
+  });
+
   it("exposes the expected item cleanup actions in the review modal", () => {
     for (const id of ["markAdded", "retryItem", "markOrdered", "deleteItem"]) {
       expect(dashboardHtml).toContain(`id="${id}"`);
