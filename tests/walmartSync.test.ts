@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createDatabase } from "../src/db/database.js";
 import { runWalmartCatalogSync, runWalmartOrderSync } from "../src/walmart/sync.js";
 import type { AppConfig } from "../src/config/config.js";
@@ -11,6 +14,14 @@ const config = {
   }
 } as AppConfig;
 const logger = { warn: () => undefined, info: () => undefined } as never;
+
+function profileQueue() {
+  return {
+    lockPath: path.join(fs.mkdtempSync(path.join(os.tmpdir(), "walmart-sync-lock-")), "profile.lock"),
+    waitMs: 5,
+    timeoutMs: 200
+  };
+}
 
 describe("Walmart sync services", () => {
   it("syncs catalog candidates and matches pending reminders", async () => {
@@ -30,7 +41,8 @@ describe("Walmart sync services", () => {
           priceText: "$1.98"
         }
       ],
-      enqueueAdd: () => undefined
+      enqueueAdd: () => undefined,
+      profileQueue: profileQueue()
     });
 
     expect(result).toMatchObject({ candidates: 1, matches: { needsReview: 1 } });
@@ -68,7 +80,8 @@ describe("Walmart sync services", () => {
       ],
       applyReminderDispositions: async ({ fulfilled }) => {
         dispositions.push(...fulfilled.map((match) => match.reminder?.externalId).filter(Boolean) as string[]);
-      }
+      },
+      profileQueue: profileQueue()
     });
 
     expect(result).toMatchObject({ orders: 1, fulfilled: [{ itemId: Number(item.id), orderId: "order-2" }] });
@@ -80,6 +93,7 @@ describe("Walmart sync services", () => {
     const db = createDatabase(":memory:");
     const events: string[] = [];
     let finishCatalog!: () => void;
+    const queueOptions = profileQueue();
     const catalogCanFinish = new Promise<void>((resolve) => {
       finishCatalog = resolve;
     });
@@ -94,7 +108,8 @@ describe("Walmart sync services", () => {
         events.push("catalog-end");
         return [];
       },
-      enqueueAdd: () => undefined
+      enqueueAdd: () => undefined,
+      profileQueue: queueOptions
     });
     const orders = runWalmartOrderSync({
       db,
@@ -104,11 +119,11 @@ describe("Walmart sync services", () => {
         events.push("orders-start");
         return [];
       },
-      applyReminderDispositions: async () => undefined
+      applyReminderDispositions: async () => undefined,
+      profileQueue: queueOptions
     });
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(events).toEqual(["catalog-start"]);
 
     finishCatalog();

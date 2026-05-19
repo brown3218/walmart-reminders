@@ -3,7 +3,7 @@ import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import type { AppDatabase, ReconciledFulfillment } from "../db/database.js";
 import { applyFulfilledReminderDispositions } from "../orders/reminderCleanup.js";
 import { scrapeRecentOrders } from "./orders.js";
-import { runExclusiveWalmartProfileTask } from "./profileQueue.js";
+import { runExclusiveWalmartProfileTask, type WalmartProfileQueueOptions } from "./profileQueue.js";
 import { scrapeReorderCandidates, type WalmartReorderCandidate } from "./reorderCatalog.js";
 import { enqueueAddMatchedItemToWalmart } from "./automation.js";
 import type { OrderInput } from "../db/database.js";
@@ -17,12 +17,16 @@ export async function runWalmartCatalogSync(input: {
   logger: pino.Logger;
   scrape?: CatalogScraper;
   enqueueAdd?: (itemId: number) => void;
+  profileQueue?: WalmartProfileQueueOptions;
 }): Promise<{ candidates: number; matches: ReturnType<AppDatabase["matchPendingItems"]> }> {
   const scrape = input.scrape ?? scrapeReorderCandidates;
   const enqueueAdd = input.enqueueAdd ?? ((itemId) => enqueueAddMatchedItemToWalmart(input.db, input.config, input.logger, itemId));
   input.db.setSyncState("walmart_catalog", "running");
   try {
-    const candidates = await runExclusiveWalmartProfileTask(() => scrape(resolveProjectPath(input.config.walmart.profileDir)));
+    const candidates = await runExclusiveWalmartProfileTask(
+      () => scrape(resolveProjectPath(input.config.walmart.profileDir)),
+      input.profileQueue
+    );
     input.db.upsertCatalogItems(
       candidates.map((candidate) => ({
         productId: null,
@@ -62,12 +66,16 @@ export async function runWalmartOrderSync(input: {
     config: AppConfig;
     logger: pino.Logger;
   }) => Promise<void>;
+  profileQueue?: WalmartProfileQueueOptions;
 }): Promise<{ orders: number; fulfilled: ReconciledFulfillment[] }> {
   const scrape = input.scrape ?? scrapeRecentOrders;
   const applyReminderDispositions = input.applyReminderDispositions ?? applyFulfilledReminderDispositions;
   input.db.setSyncState("walmart_orders", "running");
   try {
-    const orders = await runExclusiveWalmartProfileTask(() => scrape(resolveProjectPath(input.config.walmart.profileDir)));
+    const orders = await runExclusiveWalmartProfileTask(
+      () => scrape(resolveProjectPath(input.config.walmart.profileDir)),
+      input.profileQueue
+    );
     const stored = input.db.upsertOrders(orders);
     const fulfilled = input.db.reconcileOrders();
     await applyReminderDispositions({ fulfilled, config: input.config, logger: input.logger });

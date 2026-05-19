@@ -16,4 +16,10 @@ describe("Walmart CLI sync scripts", () => {
     expect(source).not.toContain("scrapeRecentOrders");
     expect(source).not.toContain("db.reconcileOrders()");
   });
+
+  it("opens the manual Walmart login window through the shared profile queue", () => {
+    const source = fs.readFileSync("scripts/open-walmart-session.ts", "utf8");
+
+    expect(source).toContain("runExclusiveWalmartProfileTask");
+  });
 });

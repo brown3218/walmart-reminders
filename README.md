@@ -76,6 +76,8 @@ npm run walmart:login
 
 Log in manually, complete any verification, then close the browser window. The app reuses that local profile for future Walmart reorder/search/add attempts.
 
+Walmart automation uses a local profile lock at `var/walmart-profile.lock` so the service, CLI sync commands, and visible login window do not open the same browser profile at the same time.
+
 The service runs Walmart catalog and recent-order sync jobs on startup and then at the configured local intervals:
 
 ```yaml
