@@ -47,12 +47,15 @@ export async function runWalmartCatalogSync(input: {
     });
     enqueueAutoMatchedItems(input.db, enqueueAdd);
     input.db.setSyncState("walmart_catalog", "ok");
-    input.db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart catalog items.`, false);
+    const message = `Captured ${candidates.length} Walmart catalog items.`;
+    input.db.updateWalmartSession("ready", message, false);
+    input.db.recordAutomationRun("catalog_sync", "ok", message);
     return { candidates: candidates.length, matches };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     input.db.setSyncState("walmart_catalog", "manual_action", message);
     input.db.updateWalmartSession("needs_manual_action", message, true);
+    input.db.recordAutomationRun("catalog_sync", "manual_action", message);
     throw error;
   }
 }
@@ -81,11 +84,13 @@ export async function runWalmartOrderSync(input: {
     const fulfilled = input.db.reconcileOrders();
     await applyReminderDispositions({ fulfilled, config: input.config, logger: input.logger });
     input.db.setSyncState("walmart_orders", "ok");
+    input.db.recordAutomationRun("order_check", "ok", `Stored ${stored} Walmart orders; fulfilled ${fulfilled.length} items.`);
     return { orders: stored, fulfilled };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     input.db.setSyncState("walmart_orders", "manual_action", message);
     input.db.updateWalmartSession("needs_manual_action", message, true);
+    input.db.recordAutomationRun("order_check", "manual_action", message);
     throw error;
   }
 }

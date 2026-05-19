@@ -114,6 +114,7 @@ export type AppDatabase = {
   resetItemForRetry(itemId: number): void;
   updateWalmartSession(status: string, message: string | null, needsManualAction: boolean): void;
   setSyncState(key: string, status: string, errorMessage?: string | null): void;
+  recordAutomationRun(action: string, status: string, message?: string | null): void;
   listSyncState(): Record<string, unknown>[];
   rejectItem(itemId: number): void;
 };
@@ -828,6 +829,15 @@ export function createDatabase(path: string): AppDatabase {
 	          error_message = excluded.error_message
 	      `
 	      ).run({ key, status, now, errorMessage });
+	    },
+	    recordAutomationRun(action, status, message = null) {
+	      const now = new Date().toISOString();
+	      raw.prepare(
+	        `
+	        insert into automation_runs (grocery_item_id, action, status, started_at, finished_at, error_message)
+	        values (null, ?, ?, ?, ?, ?)
+	      `
+	      ).run(action, status, now, now, message);
 	    },
 	    listSyncState() {
 	      return raw.prepare("select * from sync_state order by key").all() as Record<string, unknown>[];

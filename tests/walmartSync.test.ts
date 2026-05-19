@@ -86,6 +86,36 @@ describe("Walmart sync services", () => {
     });
   });
 
+  it("records catalog and order sync attempts in automation history", async () => {
+    const db = createDatabase(":memory:");
+
+    await runWalmartCatalogSync({
+      db,
+      config,
+      logger,
+      scrape: async () => [],
+      enqueueAdd: () => undefined,
+      profileQueue: profileQueue()
+    });
+    await runWalmartOrderSync({
+      db,
+      config,
+      logger,
+      scrape: async () => [],
+      applyReminderDispositions: async () => undefined,
+      profileQueue: profileQueue()
+    });
+
+    const rows = db.raw
+      .prepare("select action, status, error_message from automation_runs order by id")
+      .all() as Array<{ action: string; status: string; error_message: string | null }>;
+
+    expect(rows).toEqual([
+      { action: "catalog_sync", status: "ok", error_message: "Captured 0 Walmart catalog items." },
+      { action: "order_check", status: "ok", error_message: "Stored 0 Walmart orders; fulfilled 0 items." }
+    ]);
+  });
+
   it("syncs orders, fulfills matches, and applies reminder disposition", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({ externalId: "r2", listId: "walmart", title: "eggs", notes: null, completed: false });
