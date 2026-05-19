@@ -214,10 +214,16 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     const itemId = Number(req.params.id);
     db.markItemOrdered(itemId, "Marked ordered manually from dashboard.");
     const deletion = db.fulfillItem(itemId, "dashboard");
+    const reminder = deletion
+      ? {
+          ...deletion,
+          action: config?.reminders.fulfillAction ?? deletion.action
+        }
+      : null;
     if (deletion && config && logger) {
       void applyReminderDisposition(config, logger, { externalId: deletion.externalId, reason: "fulfill" });
     }
-    res.status(202).json({ ok: true });
+    res.status(202).json({ ok: true, reminder });
   });
 
   app.post("/api/items/:id/search", requirePin(dashboardPin), async (req, res) => {

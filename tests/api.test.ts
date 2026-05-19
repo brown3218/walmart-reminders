@@ -431,4 +431,38 @@ describe("dashboard API", () => {
       server.close();
     }
   });
+
+  it("reports the configured reminder fulfill action when marking ordered from the dashboard", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-fulfill-action",
+      listId: "walmart-list",
+      title: "eggs",
+      notes: null,
+      completed: false
+    });
+    const item = db.listItems()[0];
+    const app = createApp({
+      db,
+      dashboardPin: "1234",
+      config: { reminders: { deleteAction: "complete", fulfillAction: "delete" } } as AppConfig
+    });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/items/${item.id}/mark-ordered`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toMatchObject({
+        reminder: { externalId: "reminder-fulfill-action", action: "delete" }
+      });
+    } finally {
+      server.close();
+    }
+  });
 });
