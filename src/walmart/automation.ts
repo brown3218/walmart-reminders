@@ -2,6 +2,7 @@ import type pino from "pino";
 import type { AppDatabase } from "../db/database.js";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import { addApprovedItemToCart } from "./addToCart.js";
+import { runExclusiveWalmartProfileTask } from "./profileQueue.js";
 import { removeApprovedItemFromCart } from "./removeFromCart.js";
 import { isWalmartProductUrl } from "./urls.js";
 
@@ -45,7 +46,7 @@ export async function addMatchedItemToWalmart(
 
   db.markItemAdding(itemId);
   try {
-    const result = await addApprovedItemToCart(resolveProjectPath(config.walmart.profileDir), url);
+    const result = await runExclusiveWalmartProfileTask(() => addApprovedItemToCart(resolveProjectPath(config.walmart.profileDir), url));
     if (result.status === "added") {
       db.markItemAdded(itemId, result.message);
     } else if (result.status === "needs_manual_action") {
@@ -72,7 +73,9 @@ async function removeMatchedItemFromWalmart(
   if (!title) return;
 
   try {
-    const result = await removeApprovedItemFromCart(resolveProjectPath(config.walmart.profileDir), { title, url });
+    const result = await runExclusiveWalmartProfileTask(() =>
+      removeApprovedItemFromCart(resolveProjectPath(config.walmart.profileDir), { title, url })
+    );
     if (result.status === "removed") {
       db.markItemCartRemoved(itemId, result.message);
     } else {

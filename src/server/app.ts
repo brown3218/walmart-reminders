@@ -7,6 +7,7 @@ import type { AppDatabase } from "../db/database.js";
 import { applyReminderDisposition } from "../reminders/actions.js";
 import { pollRemindersOnce } from "../reminders/poller.js";
 import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } from "../walmart/automation.js";
+import { runExclusiveWalmartProfileTask } from "../walmart/profileQueue.js";
 import { searchWalmartProducts } from "../walmart/search.js";
 import { runWalmartCatalogSync, runWalmartOrderSync } from "../walmart/sync.js";
 import { isWalmartProductUrl } from "../walmart/urls.js";
@@ -194,7 +195,9 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
         res.status(404).json({ error: "Item not found." });
         return;
       }
-      const candidates = await searchWalmartProducts(resolveProjectPath(config.walmart.profileDir), item.raw_text);
+      const candidates = await runExclusiveWalmartProfileTask(() =>
+        searchWalmartProducts(resolveProjectPath(config.walmart.profileDir), item.raw_text)
+      );
       db.replaceCandidates(Number(req.params.id), candidates);
       db.updateWalmartSession("ready", null, false);
       res.status(202).json({ ok: true, candidates: candidates.length });

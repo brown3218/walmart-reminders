@@ -75,4 +75,44 @@ describe("Walmart sync services", () => {
     expect(dispositions).toEqual(["r2"]);
     expect(db.listItems()).toEqual([]);
   });
+
+  it("serializes concurrent catalog and order scrapers through the shared profile queue", async () => {
+    const db = createDatabase(":memory:");
+    const events: string[] = [];
+    let finishCatalog!: () => void;
+    const catalogCanFinish = new Promise<void>((resolve) => {
+      finishCatalog = resolve;
+    });
+
+    const catalog = runWalmartCatalogSync({
+      db,
+      config,
+      logger,
+      scrape: async () => {
+        events.push("catalog-start");
+        await catalogCanFinish;
+        events.push("catalog-end");
+        return [];
+      },
+      enqueueAdd: () => undefined
+    });
+    const orders = runWalmartOrderSync({
+      db,
+      config,
+      logger,
+      scrape: async () => {
+        events.push("orders-start");
+        return [];
+      },
+      applyReminderDispositions: async () => undefined
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(events).toEqual(["catalog-start"]);
+
+    finishCatalog();
+    await Promise.all([catalog, orders]);
+    expect(events).toEqual(["catalog-start", "catalog-end", "orders-start"]);
+  });
 });
