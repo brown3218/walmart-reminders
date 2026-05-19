@@ -8,6 +8,7 @@ import {
   buildReadReminderArgs,
   buildReadReminderCommand
 } from "../src/reminders/helper.js";
+import { formatWalmartSessionDoctorCheck } from "../src/walmart/manualAction.js";
 
 describe("doctor reminders helper", () => {
   it("checks every configured reminder list", () => {
@@ -59,6 +60,19 @@ describe("doctor reminders helper", () => {
     expect(buildReminderDispositionCommand(projectRoot, "complete", "r1")).toEqual({
       command: helperPath,
       args: ["complete", "--external-id", "r1"]
+    });
+  });
+
+  it("reports Walmart manual-action status in doctor output", () => {
+    expect(
+      formatWalmartSessionDoctorCheck({
+        status: "needs_manual_action",
+        error_message: "Walmart requires manual login or verification before catalog sync can continue.",
+        needs_manual_action: 1
+      })
+    ).toEqual({
+      ok: false,
+      detail: "needs manual action - Walmart requires manual login or verification before catalog sync can continue."
     });
   });
 });

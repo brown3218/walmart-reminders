@@ -4,6 +4,7 @@ import { loadConfig, resolveProjectPath } from "../src/config/config.js";
 import { createDatabase } from "../src/db/database.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "../src/network/urls.js";
 import { readReminderSnapshot } from "../src/reminders/poller.js";
+import { formatWalmartSessionDoctorCheck, type WalmartSessionDoctorRow } from "../src/walmart/manualAction.js";
 
 type Check = {
   name: string;
@@ -32,6 +33,10 @@ try {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = createDatabase(dbPath);
   db.raw.prepare("select 1").get();
+  const walmartSession = db.raw
+    .prepare("select status, error_message, needs_manual_action from walmart_session_state where id = 1")
+    .get() as WalmartSessionDoctorRow | undefined;
+  checks.push({ name: "Walmart session", ...formatWalmartSessionDoctorCheck(walmartSession) });
   db.raw.close();
   checks.push({ name: "SQLite path", ok: true, detail: dbPath });
 } catch (error) {
