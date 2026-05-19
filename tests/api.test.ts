@@ -68,6 +68,58 @@ describe("dashboard API", () => {
     }
   });
 
+  it("approves a stored candidate by candidate ID without trusting browser-sent product details", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-candidate-approval",
+      listId: "walmart-list",
+      title: "ranch mix",
+      notes: null,
+      completed: false
+    });
+    const item = db.listItems()[0];
+    db.replaceCandidates(Number(item.id), [
+      {
+        walmartProductId: "ranch-123",
+        title: "Hidden Valley Ranch Mix",
+        url: "https://www.walmart.com/ip/ranch/123",
+        priceText: "$2.48",
+        sizeText: "1 oz",
+        availabilityText: "Pickup",
+        imageUrl: "https://example.test/ranch.jpg",
+        confidence: 0.8,
+        source: "walmart_search"
+      }
+    ]);
+    const candidateId = Number(db.listItems()[0].candidate_id);
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/items/${item.id}/approve`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-dashboard-pin": "1234"
+        },
+        body: JSON.stringify({ candidateId })
+      });
+      expect(response.status).toBe(202);
+
+      expect(db.getChosenProduct(Number(item.id))).toMatchObject({
+        walmart_product_id: "ranch-123",
+        title: "Hidden Valley Ranch Mix",
+        url: "https://www.walmart.com/ip/ranch/123",
+        image_url: "https://example.test/ranch.jpg"
+      });
+    } finally {
+      server.close();
+    }
+  });
+
   it("refuses to approve generic Walmart search pages for cart automation", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({

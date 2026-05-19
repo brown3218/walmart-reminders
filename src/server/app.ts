@@ -123,18 +123,32 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
 
   app.post("/api/items/:id/approve", requirePin(dashboardPin), (req, res) => {
     const itemId = Number(req.params.id);
-    const url = req.body.url ?? "";
+    const candidateId = req.body.candidateId ? Number(req.body.candidateId) : null;
+    const candidate = candidateId
+      ? (db.raw
+          .prepare(
+            `
+            select walmart_product_id, title, url, image_url
+            from product_candidates
+            where id = ? and grocery_item_id = ?
+          `
+          )
+          .get(candidateId, itemId) as
+          | { walmart_product_id: string | null; title: string; url: string; image_url: string | null }
+          | undefined)
+      : undefined;
+    const url = req.body.url ?? candidate?.url ?? "";
     if (!isWalmartProductUrl(url)) {
       res.status(400).json({ error: "Choose a Walmart product page before approving this item." });
       return;
     }
     db.approveItem({
       itemId,
-      candidateId: req.body.candidateId ? Number(req.body.candidateId) : null,
-      walmartProductId: req.body.walmartProductId ?? null,
+      candidateId,
+      walmartProductId: req.body.walmartProductId ?? candidate?.walmart_product_id ?? null,
       url,
-      title: req.body.title ?? "Approved item",
-      imageUrl: req.body.imageUrl ?? null,
+      title: req.body.title ?? candidate?.title ?? "Approved item",
+      imageUrl: req.body.imageUrl ?? candidate?.image_url ?? null,
       chosenBy: "dashboard"
     });
     if (config && logger) {
