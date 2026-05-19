@@ -16,4 +16,9 @@ describe("dashboard markup", () => {
     expect(dashboardHtml).toContain('"/api/sync/walmart-catalog"');
     expect(dashboardHtml).toContain('"/api/sync/orders"');
   });
+
+  it("shows Walmart order sync status in the header tiles", () => {
+    expect(dashboardHtml).toContain('id="ordersStatus"');
+    expect(dashboardHtml).toContain('syncLabel(syncRows, "walmart_orders")');
+  });
 });
