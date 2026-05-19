@@ -2,6 +2,7 @@ import { normalizeText } from "../parser/groceryParser.js";
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
 import type { OrderInput } from "../db/database.js";
 import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
+import { extractWalmartProductId } from "./urls.js";
 
 export async function scrapeRecentOrders(profileDir: string): Promise<OrderInput[]> {
   const context = await openPersistentWalmartSession(profileDir);
@@ -72,7 +73,7 @@ export async function scrapeRecentOrders(profileDir: string): Promise<OrderInput
         status: order.status ? String(order.status) : null,
         items: order.items
           .map((item: { title: string; url?: string | null; imageUrl?: string | null; priceText?: string | null; quantity?: number | null }) => ({
-            productId: extractProductId(item.url ?? null),
+            productId: extractWalmartProductId(item.url ?? null),
             title: item.title,
             url: item.url ?? null,
             imageUrl: item.imageUrl ?? null,
@@ -86,9 +87,4 @@ export async function scrapeRecentOrders(profileDir: string): Promise<OrderInput
   } finally {
     await context.close();
   }
-}
-
-function extractProductId(url: string | null): string | null {
-  if (!url) return null;
-  return url.match(/\/ip\/(?:[^/]+\/)?(\d+)/)?.[1] ?? null;
 }

@@ -7,6 +7,7 @@ import { runExclusiveWalmartProfileTask, type WalmartProfileQueueOptions } from 
 import { scrapeReorderCandidates, type WalmartReorderCandidate } from "./reorderCatalog.js";
 import { enqueueAddMatchedItemToWalmart } from "./automation.js";
 import type { OrderInput } from "../db/database.js";
+import { extractWalmartProductId } from "./urls.js";
 
 type CatalogScraper = (profileDir: string) => Promise<WalmartReorderCandidate[]>;
 type OrderScraper = (profileDir: string) => Promise<OrderInput[]>;
@@ -29,7 +30,7 @@ export async function runWalmartCatalogSync(input: {
     );
     input.db.upsertCatalogItems(
       candidates.map((candidate) => ({
-        productId: null,
+        productId: extractWalmartProductId(candidate.url),
         title: candidate.title,
         normalizedTitle: candidate.normalizedTitle,
         url: candidate.url,
