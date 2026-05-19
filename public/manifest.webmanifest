@@ -1,0 +1,9 @@
+{
+  "name": "Walmart Reminders",
+  "short_name": "Walmart",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f2",
+  "theme_color": "#0a6b57",
+  "icons": []
+}

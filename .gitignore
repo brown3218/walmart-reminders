@@ -1,0 +1,8 @@
+node_modules/
+dist/
+var/
+config.yaml
+.DS_Store
+.swiftpm/
+.build/
+**/.build/

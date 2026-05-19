@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Walmart Reminders</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f7f7f2;
+        color: #17201c;
+      }
+      body {
+        margin: 0;
+      }
+      header {
+        background: #0a6b57;
+        color: white;
+        padding: 18px 16px;
+      }
+      main {
+        padding: 16px;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0;
+      }
+      .status {
+        display: grid;
+        gap: 8px;
+        margin: 16px 0;
+      }
+      h2 {
+        font-size: 24px;
+        margin: 22px 0 12px;
+      }
+      .card {
+        background: white;
+        border: 1px solid #d8ded9;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .title {
+        font-size: 17px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .item {
+        display: grid;
+        grid-template-columns: 58px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+      .thumb {
+        width: 58px;
+        height: 58px;
+        border-radius: 8px;
+        background: #e7eee9;
+        border: 1px solid #d8ded9;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        color: #0a6b57;
+        font-weight: 800;
+        font-size: 18px;
+      }
+      .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .muted {
+        color: #5d6761;
+        font-size: 14px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        background: #e7eee9;
+        color: #17201c;
+        padding: 0 9px;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+      .pill.matched,
+      .pill.added {
+        background: #d9f2e7;
+        color: #07523f;
+      }
+      .pill.failed {
+        background: #ffe3df;
+        color: #8a1d12;
+      }
+      .pill.skipped {
+        background: #eee9dc;
+        color: #5d4c24;
+      }
+      .meta {
+        display: grid;
+        gap: 3px;
+        margin-top: 5px;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      button,
+      .button-link {
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 700;
+        text-decoration: none;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        box-sizing: border-box;
+        padding: 0 8px;
+      }
+      .primary {
+        background: #0a6b57;
+        color: white;
+      }
+      .secondary {
+        background: #e7eee9;
+        color: #17201c;
+      }
+      .full {
+        grid-column: 1 / -1;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 44px;
+        border: 1px solid #b8c2bc;
+        border-radius: 8px;
+        padding: 0 10px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Walmart Reminders</h1>
+    </header>
+    <main>
+      <div class="card">
+        <label class="muted" for="pin">Dashboard PIN</label>
+        <input id="pin" type="password" autocomplete="current-password" />
+      </div>
+      <section class="status card" id="status">Loading status...</section>
+      <h2>Needs Approval</h2>
+      <section id="approvals"></section>
+      <h2>Recent Activity</h2>
+      <section id="history"></section>
+    </main>
+    <script>
+      const pinInput = document.querySelector("#pin");
+      let latestApprovals = [];
+      pinInput.value = localStorage.getItem("dashboardPin") || "";
+      pinInput.addEventListener("change", () => localStorage.setItem("dashboardPin", pinInput.value));
+
+      async function request(path, options = {}) {
+        const headers = { ...(options.headers || {}), "x-dashboard-pin": pinInput.value };
+        return fetch(path, { ...options, headers });
+      }
+
+      async function load() {
+        const health = await fetch("/api/health").then((r) => r.json());
+        document.querySelector("#status").innerHTML = `
+          <div><strong>Server:</strong> ${health.ok ? "running" : "offline"}</div>
+          <div><strong>Walmart session:</strong> ${health.walmartSession?.status || "unknown"}</div>
+          ${
+            health.walmartSession?.needs_manual_action
+              ? '<button class="primary" onclick="openWalmartSession()">Open Walmart Login on Mac</button>'
+              : ""
+          }
+        `;
+
+        const approvalsResponse = await request("/api/approvals");
+        if (!approvalsResponse.ok) {
+          document.querySelector("#approvals").innerHTML = '<div class="card">Enter PIN to load approvals.</div>';
+          return;
+        }
+        const approvals = await approvalsResponse.json();
+        latestApprovals = approvals.items;
+        document.querySelector("#approvals").innerHTML =
+          approvals.items.length === 0
+            ? '<div class="card muted">No items need approval.</div>'
+            : approvals.items
+                .map((item) => approvalCard(item))
+                .join("");
+
+        const historyResponse = await request("/api/history");
+        if (!historyResponse.ok) {
+          document.querySelector("#history").innerHTML = '<div class="card">Enter PIN to load history.</div>';
+          return;
+        }
+        const history = await historyResponse.json();
+        document.querySelector("#history").innerHTML =
+          history.items.length === 0
+            ? '<div class="card muted">No activity yet.</div>'
+            : history.items
+                .map((item) => historyCard(item))
+                .join("");
+      }
+
+      function approvalCard(item) {
+        return `
+          <div class="card item">
+            ${thumbnail(item)}
+            <div>
+              <div class="title">${escapeHtml(item.raw_text)}</div>
+              <span class="pill ${escapeHtml(item.status)}">${statusLabel(item.status)}</span>
+              <div class="meta muted">
+                <div>${approvalDetail(item)}</div>
+                ${candidateDetail(item)}
+              </div>
+                      <div class="actions">
+                        ${approvalActions(item)}
+                        <a class="button-link secondary" href="${escapeAttribute(walmartUrl(item))}" target="_blank" rel="noreferrer">Open Walmart</a>
+                        <button class="primary" onclick="markAdded(${item.id})">I Added It</button>
+                        <button class="secondary" onclick="rejectItem(${item.id})">Reject</button>
+                      </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function historyCard(item) {
+        return `
+          <div class="card item">
+            ${thumbnail(item)}
+            <div>
+              <div class="title">${escapeHtml(item.raw_text)}</div>
+              <span class="pill ${escapeHtml(item.status)}">${statusLabel(item.status)}</span>
+              <div class="meta muted">
+                <div>${historyDetail(item)}</div>
+                ${candidateDetail(item)}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function approveItem(id) {
+        const item = latestApprovals.find((candidate) => Number(candidate.id) === Number(id));
+        if (!item?.candidate_url) {
+          await searchItem(id);
+          return;
+        }
+        await request(`/api/items/${id}/approve`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            candidateId: item.candidate_id,
+            title: item.candidate_title || item.raw_text,
+            url: item.candidate_url
+          })
+        });
+        await load();
+      }
+
+      async function searchItem(id) {
+        const response = await request(`/api/items/${id}/search`, { method: "POST" });
+        if (!response.ok) {
+          await load();
+          return;
+        }
+        await load();
+      }
+
+      async function openWalmartSession() {
+        await request("/api/walmart/open-session", { method: "POST" });
+        await load();
+      }
+
+      async function rejectItem(id) {
+        await request(`/api/items/${id}/reject`, { method: "POST" });
+        await load();
+      }
+
+      async function markAdded(id) {
+        await request(`/api/items/${id}/mark-added`, { method: "POST" });
+        await load();
+      }
+
+      function thumbnail(item) {
+        const imageUrl = item.candidate_image_url;
+        if (imageUrl) {
+          return `<div class="thumb"><img src="${escapeAttribute(imageUrl)}" alt="" loading="lazy" /></div>`;
+        }
+        const label = String(item.raw_text || "?").trim().slice(0, 2).toUpperCase();
+        return `<div class="thumb">${escapeHtml(label || "?")}</div>`;
+      }
+
+      function approvalDetail(item) {
+        if (item.candidate_title) return `Candidate: ${escapeHtml(item.candidate_title)}`;
+        if (item.status === "failed") return escapeHtml(item.error_message || "Needs retry");
+        return "Waiting for product match";
+      }
+
+      function approvalActions(item) {
+        if (item.candidate_url) {
+          return `<button class="primary" onclick="approveItem(${item.id})">Approve Candidate</button>`;
+        }
+        return `<button class="primary" onclick="searchItem(${item.id})">Find Matches</button>`;
+      }
+
+      function walmartUrl(item) {
+        if (item.candidate_url) return item.candidate_url;
+        return `https://www.walmart.com/search?q=${encodeURIComponent(item.raw_text || "")}`;
+      }
+
+      function historyDetail(item) {
+        if (item.status === "matched") return `Matched: ${escapeHtml(item.chosen_title || item.candidate_title || "Dashboard approved")}`;
+        if (item.status === "added") return `Added: ${escapeHtml(item.chosen_title || item.candidate_title || item.raw_text)}`;
+        if (item.status === "skipped") return "Skipped";
+        if (item.status === "failed") return escapeHtml(item.error_message || "Failed");
+        return "Queued for matching";
+      }
+
+      function candidateDetail(item) {
+        const parts = [item.candidate_price_text, item.candidate_size_text, item.candidate_availability_text].filter(Boolean);
+        return parts.length ? `<div>${escapeHtml(parts.join(" • "))}</div>` : "";
+      }
+
+      function statusLabel(status) {
+        const labels = {
+          parsed: "Needs Match",
+          needs_review: "Review",
+          matched: "Matched",
+          adding: "Adding",
+          added: "Added",
+          failed: "Failed",
+          skipped: "Skipped"
+        };
+        return labels[status] || status;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        })[char]);
+      }
+
+      function escapeAttribute(value) {
+        return escapeHtml(value).replace(/`/g, "&#096;");
+      }
+
+      pinInput.addEventListener("input", load);
+      load();
+      setInterval(load, 15000);
+    </script>
+  </body>
+</html>
