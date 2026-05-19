@@ -24,7 +24,7 @@ describe("Reminder poller", () => {
       pollOnce: async () => {
         calls += 1;
         if (calls === 1) await firstCanFinish;
-        return { ingested: 0, skipped: 0 };
+        return { ingested: 0, skipped: 0, cartRemovals: [] };
       }
     });
 

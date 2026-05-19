@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type pino from "pino";
 import type { AppConfig } from "../config/config.js";
-import type { AppDatabase } from "../db/database.js";
+import type { AppDatabase, DashboardDeletion } from "../db/database.js";
 import { parseReminderJsonLines, parseReminderTsvLines } from "./ingest.js";
 import {
   REMINDERS_HELPER_TIMEOUT_MS,
@@ -30,8 +30,14 @@ export type ReminderPollerOptions = {
   db: AppDatabase;
   config: AppConfig;
   logger: pino.Logger;
-  afterPoll?: (result: { ingested: number; skipped: number }) => void | Promise<void>;
-  pollOnce?: (db: AppDatabase, config: AppConfig) => Promise<{ ingested: number; skipped: number }>;
+  afterPoll?: (result: ReminderPollResult) => void | Promise<void>;
+  pollOnce?: (db: AppDatabase, config: AppConfig) => Promise<ReminderPollResult>;
+};
+
+export type ReminderPollResult = {
+  ingested: number;
+  skipped: number;
+  cartRemovals: DashboardDeletion[];
 };
 
 export function startReminderPoller({ db, config, logger, afterPoll, pollOnce = pollRemindersOnce }: ReminderPollerOptions): NodeJS.Timeout {
@@ -57,10 +63,10 @@ export function startReminderPoller({ db, config, logger, afterPoll, pollOnce = 
   return setInterval(run, config.reminders.pollSeconds * 1000);
 }
 
-export async function pollRemindersOnce(db: AppDatabase, config: AppConfig): Promise<{ ingested: number; skipped: number }> {
+export async function pollRemindersOnce(db: AppDatabase, config: AppConfig): Promise<ReminderPollResult> {
   const { reminders, skipped } = await readReminderSnapshot(config);
-  applyReminderSnapshot(db, reminders);
-  return { ingested: reminders.length, skipped };
+  const snapshot = applyReminderSnapshot(db, reminders);
+  return { ingested: reminders.length, skipped, cartRemovals: snapshot.cartRemovals };
 }
 
 export async function readReminderSnapshot(

@@ -81,6 +81,7 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
         proposeThreshold: config.walmart.proposeThreshold
       });
       enqueueAutoMatchedItems(db, config, logger);
+      enqueueReminderDrivenCartRemovals(db, config, logger, result.cartRemovals);
       db.setSyncState("reminders", "ok");
       res.status(202).json({ ok: true, result, matches });
     } catch (error) {
@@ -242,6 +243,19 @@ function enqueueAutoMatchedItems(db: AppDatabase, config: AppConfig, logger: pin
   for (const item of db.listItems()) {
     if (item.status === "auto_matched" && item.cart_status === "not_added") {
       enqueueAddMatchedItemToWalmart(db, config, logger, Number(item.id));
+    }
+  }
+}
+
+function enqueueReminderDrivenCartRemovals(
+  db: AppDatabase,
+  config: AppConfig,
+  logger: pino.Logger,
+  removals: Array<{ itemId: number; needsCartRemoval: boolean }>
+): void {
+  for (const removal of removals) {
+    if (removal.needsCartRemoval) {
+      enqueueRemoveMatchedItemFromWalmart(db, config, logger, removal.itemId);
     }
   }
 }

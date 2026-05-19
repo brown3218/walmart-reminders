@@ -6,7 +6,7 @@ import { createDatabase } from "./db/database.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "./network/urls.js";
 import { startReminderPoller } from "./reminders/poller.js";
 import { createApp } from "./server/app.js";
-import { enqueueAddMatchedItemToWalmart } from "./walmart/automation.js";
+import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } from "./walmart/automation.js";
 import { startWalmartSyncJobs } from "./walmart/scheduler.js";
 import { runWalmartCatalogSync, runWalmartOrderSync } from "./walmart/sync.js";
 
@@ -21,12 +21,13 @@ startReminderPoller({
   db,
   config,
   logger,
-  afterPoll: () => {
+  afterPoll: (result) => {
     const matches = db.matchPendingItems({
       autoAddThreshold: config.walmart.autoAddThreshold,
       proposeThreshold: config.walmart.proposeThreshold
     });
     enqueueAutoMatchedItems();
+    enqueueReminderDrivenCartRemovals(result.cartRemovals);
     logger.info(matches, "pending reminders matched after poll");
   }
 });
@@ -96,6 +97,14 @@ function enqueueAutoMatchedItems(): void {
   for (const item of db.listItems()) {
     if (item.status === "auto_matched" && item.cart_status === "not_added") {
       enqueueAddMatchedItemToWalmart(db, config, logger, Number(item.id));
+    }
+  }
+}
+
+function enqueueReminderDrivenCartRemovals(removals: Array<{ itemId: number; needsCartRemoval: boolean }>): void {
+  for (const removal of removals) {
+    if (removal.needsCartRemoval) {
+      enqueueRemoveMatchedItemFromWalmart(db, config, logger, removal.itemId);
     }
   }
 }
