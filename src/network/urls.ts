@@ -54,3 +54,12 @@ export function buildDashboardUrls(input: {
   if (input.httpsPort && httpsHost) urls.https = `https://${httpsHost}:${input.httpsPort}`;
   return urls;
 }
+
+export function buildDashboardAuthHeaders(pin: string | null): Record<string, string> {
+  return pin ? { "x-dashboard-pin": pin } : {};
+}
+
+export function formatDashboardAuthDoctorCheck(status: number, ok: boolean): { ok: boolean; detail: string } {
+  if (ok) return { ok: true, detail: "protected dashboard API accepted the configured PIN" };
+  return { ok: false, detail: `protected dashboard API rejected the configured PIN (HTTP ${status})` };
+}

@@ -7,7 +7,13 @@ import {
   resolveProjectPath
 } from "../src/config/config.js";
 import { createDatabase } from "../src/db/database.js";
-import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "../src/network/urls.js";
+import {
+  buildDashboardAuthHeaders,
+  buildDashboardUrls,
+  detectBonjourHost,
+  formatDashboardAuthDoctorCheck,
+  pickLanAddress
+} from "../src/network/urls.js";
 import { readReminderSnapshot } from "../src/reminders/poller.js";
 import { formatWalmartSessionDoctorCheck, type WalmartSessionDoctorRow } from "../src/walmart/manualAction.js";
 
@@ -81,6 +87,21 @@ try {
   checks.push({ name: "Dashboard reachable", ok: response.ok, detail: dashboardUrl });
 } catch (error) {
   checks.push({ name: "Dashboard reachable", ok: false, detail: `${dashboardUrl} is not responding (${messageOf(error)})` });
+}
+
+const dashboardStatusUrl = `http://127.0.0.1:${config.dashboard.port}/api/status`;
+try {
+  const response = await fetch(dashboardStatusUrl, {
+    headers: buildDashboardAuthHeaders(config.dashboard.pin),
+    signal: AbortSignal.timeout(2000)
+  });
+  checks.push({ name: "Dashboard auth", ...formatDashboardAuthDoctorCheck(response.status, response.ok) });
+} catch (error) {
+  checks.push({
+    name: "Dashboard auth",
+    ok: false,
+    detail: `${dashboardStatusUrl} is not responding (${messageOf(error)})`
+  });
 }
 
 const lanAddress = pickLanAddress();

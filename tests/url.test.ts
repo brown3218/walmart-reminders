@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildDashboardUrls, pickLanAddress } from "../src/network/urls.js";
+import {
+  buildDashboardAuthHeaders,
+  buildDashboardUrls,
+  formatDashboardAuthDoctorCheck,
+  pickLanAddress
+} from "../src/network/urls.js";
 
 describe("dashboard URL detection", () => {
   it("prefers private IPv4 addresses for the iPhone LAN URL", () => {
@@ -26,6 +31,19 @@ describe("dashboard URL detection", () => {
       lan: null,
       bonjour: "http://mac-mini.local:3789",
       https: "https://mac-mini.local:3790"
+    });
+  });
+
+  it("builds dashboard auth headers and doctor output for protected API checks", () => {
+    expect(buildDashboardAuthHeaders(null)).toEqual({});
+    expect(buildDashboardAuthHeaders("1234")).toEqual({ "x-dashboard-pin": "1234" });
+    expect(formatDashboardAuthDoctorCheck(200, true)).toEqual({
+      ok: true,
+      detail: "protected dashboard API accepted the configured PIN"
+    });
+    expect(formatDashboardAuthDoctorCheck(401, false)).toEqual({
+      ok: false,
+      detail: "protected dashboard API rejected the configured PIN (HTTP 401)"
     });
   });
 });
