@@ -2,12 +2,12 @@ import type pino from "pino";
 import type { AppDatabase } from "../db/database.js";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import { addApprovedItemToCart, type AddToCartResult, type AddToCartTarget } from "./addToCart.js";
+import { createSerialAutomationQueue } from "./automationQueue.js";
 import { runExclusiveWalmartProfileTask } from "./profileQueue.js";
 import { removeApprovedItemFromCart } from "./removeFromCart.js";
 import { isWalmartProductUrl } from "./urls.js";
 
-let addQueue = Promise.resolve();
-let removeQueue = Promise.resolve();
+const walmartAutomationQueue = createSerialAutomationQueue();
 
 export function enqueueAddMatchedItemToWalmart(
   db: AppDatabase,
@@ -15,9 +15,7 @@ export function enqueueAddMatchedItemToWalmart(
   logger: pino.Logger,
   itemId: number
 ): void {
-  addQueue = addQueue
-    .catch(() => undefined)
-    .then(() => addMatchedItemToWalmart(db, config, logger, itemId));
+  void walmartAutomationQueue.enqueue(() => addMatchedItemToWalmart(db, config, logger, itemId));
 }
 
 export function enqueueRemoveMatchedItemFromWalmart(
@@ -26,9 +24,7 @@ export function enqueueRemoveMatchedItemFromWalmart(
   logger: pino.Logger,
   itemId: number
 ): void {
-  removeQueue = removeQueue
-    .catch(() => undefined)
-    .then(() => removeMatchedItemFromWalmart(db, config, logger, itemId));
+  void walmartAutomationQueue.enqueue(() => removeMatchedItemFromWalmart(db, config, logger, itemId));
 }
 
 export async function addMatchedItemToWalmart(
