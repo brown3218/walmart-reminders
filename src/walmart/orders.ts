@@ -1,6 +1,7 @@
 import { normalizeText } from "../parser/groceryParser.js";
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
 import type { OrderInput } from "../db/database.js";
+import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
 
 export async function scrapeRecentOrders(profileDir: string): Promise<OrderInput[]> {
   const context = await openPersistentWalmartSession(profileDir);
@@ -9,8 +10,8 @@ export async function scrapeRecentOrders(profileDir: string): Promise<OrderInput
     await page.goto("https://www.walmart.com/orders", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(3000);
     const body = await page.locator("body").innerText({ timeout: 7000 });
-    if (/captcha|verify|sign in|log in|two-step|security check|press and hold/i.test(body)) {
-      throw new Error("Walmart requires manual login or verification before order sync can continue.");
+    if (detectWalmartManualAction(body)) {
+      throw new Error(walmartManualActionMessage("orders"));
     }
 
     type ScrapedOrder = {

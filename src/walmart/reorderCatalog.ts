@@ -1,5 +1,6 @@
 import { chromium, type BrowserContext } from "@playwright/test";
 import { normalizeText } from "../parser/groceryParser.js";
+import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
 
 export type WalmartReorderCandidate = {
   title: string;
@@ -22,8 +23,8 @@ export async function scrapeReorderCandidates(profileDir: string): Promise<Walma
   try {
     await page.goto("https://www.walmart.com/my-items/reorder", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(3000);
-    if (/sign in|log in/i.test(await page.locator("body").innerText({ timeout: 5000 }))) {
-      throw new Error("Walmart login required in persistent browser profile.");
+    if (detectWalmartManualAction(await page.locator("body").innerText({ timeout: 5000 }))) {
+      throw new Error(walmartManualActionMessage("catalog"));
     }
 
     const links = await page.locator('a[href*="/ip/"]').evaluateAll((anchors) =>

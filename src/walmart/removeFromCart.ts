@@ -1,4 +1,5 @@
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
+import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
 
 export type RemoveFromCartResult =
   | { status: "removed"; message: string }
@@ -16,8 +17,8 @@ export async function removeApprovedItemFromCart(
     await page.goto("https://www.walmart.com/cart", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2500);
     const body = await page.locator("body").innerText({ timeout: 7000 });
-    if (/captcha|verify|sign in|log in|two-step|security check|press and hold/i.test(body)) {
-      return { status: "needs_manual_action", message: "Walmart requires manual login or verification before cart removal." };
+    if (detectWalmartManualAction(body)) {
+      return { status: "needs_manual_action", message: walmartManualActionMessage("cart_remove") };
     }
 
     const titleTerms = target.title

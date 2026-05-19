@@ -1,4 +1,5 @@
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
+import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
 
 export type AddToCartResult =
   | { status: "added"; message: string }
@@ -12,8 +13,8 @@ export async function addApprovedItemToCart(profileDir: string, productUrl: stri
     await page.goto(productUrl, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2000);
     const body = await page.locator("body").innerText({ timeout: 5000 });
-    if (/captcha|verify|sign in|log in|two-step|security check/i.test(body)) {
-      return { status: "needs_manual_action", message: "Walmart requires manual login or verification." };
+    if (detectWalmartManualAction(body)) {
+      return { status: "needs_manual_action", message: walmartManualActionMessage("cart_add") };
     }
 
     const addButton = page

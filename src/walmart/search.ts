@@ -1,6 +1,7 @@
 import { normalizeText } from "../parser/groceryParser.js";
 import { openPersistentWalmartSession } from "./reorderCatalog.js";
 import type { ProductCandidateInput } from "../db/database.js";
+import { detectWalmartManualAction, walmartManualActionMessage } from "./manualAction.js";
 
 export async function searchWalmartProducts(profileDir: string, query: string): Promise<ProductCandidateInput[]> {
   const context = await openPersistentWalmartSession(profileDir);
@@ -10,8 +11,8 @@ export async function searchWalmartProducts(profileDir: string, query: string): 
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(3500);
     const body = await page.locator("body").innerText({ timeout: 5000 });
-    if (/captcha|verify|sign in|log in|two-step|security check/i.test(body)) {
-      throw new Error("Walmart requires manual login or verification before search can continue.");
+    if (detectWalmartManualAction(body)) {
+      throw new Error(walmartManualActionMessage("search"));
     }
 
     const raw = await page.locator('a[href*="/ip/"]').evaluateAll((anchors) =>
