@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../src/config/config.js";
+import { formatDashboardPinDoctorCheck, loadConfig } from "../src/config/config.js";
 
 describe("configuration", () => {
   it("uses catalogSyncMinutes as the Walmart catalog interval config", () => {
@@ -17,5 +17,20 @@ describe("configuration", () => {
 
     expect(example).toContain("catalogSyncMinutes: 60");
     expect(example).not.toContain("reorderSyncHours");
+  });
+
+  it("warns when the dashboard PIN is missing or still the setup placeholder", () => {
+    expect(formatDashboardPinDoctorCheck(null)).toEqual({
+      ok: false,
+      detail: "dashboard PIN is disabled; set dashboard.pin before using the LAN URL"
+    });
+    expect(formatDashboardPinDoctorCheck("change-me")).toEqual({
+      ok: false,
+      detail: "dashboard PIN is still change-me; set a private PIN before using the LAN URL"
+    });
+    expect(formatDashboardPinDoctorCheck("812846")).toEqual({
+      ok: true,
+      detail: "dashboard PIN is configured"
+    });
   });
 });

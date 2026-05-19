@@ -71,3 +71,14 @@ export function loadConfig(configPath = process.env.WALMART_REMINDERS_CONFIG ?? 
 export function resolveProjectPath(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);
 }
+
+export function formatDashboardPinDoctorCheck(pin: string | null): { ok: boolean; detail: string } {
+  const normalized = pin?.trim() ?? "";
+  if (!normalized) {
+    return { ok: false, detail: "dashboard PIN is disabled; set dashboard.pin before using the LAN URL" };
+  }
+  if (normalized === "change-me") {
+    return { ok: false, detail: "dashboard PIN is still change-me; set a private PIN before using the LAN URL" };
+  }
+  return { ok: true, detail: "dashboard PIN is configured" };
+}
