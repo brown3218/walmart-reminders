@@ -85,6 +85,7 @@ export type AppDatabase = {
   listItems(options?: ListItemsOptions): Record<string, unknown>[];
   listApprovals(): Record<string, unknown>[];
   listHistory(): Record<string, unknown>[];
+  listActivity(): Record<string, unknown>[];
   upsertCatalogItems(items: CatalogItemInput[]): number;
   matchPendingItems(thresholds: MatchThresholds): MatchPendingResult;
   upsertOrders(orders: OrderInput[]): number;
@@ -238,6 +239,30 @@ export function createDatabase(path: string): AppDatabase {
 	    },
 	    listHistory() {
 	      return listItemsQuery(raw, true, null, 80);
+	    },
+	    listActivity() {
+	      return raw
+	        .prepare(
+	          `
+	          select
+	            'automation' as type,
+	            ar.id,
+	            ar.action,
+	            ar.status,
+	            ar.error_message as detail,
+	            coalesce(ar.finished_at, ar.started_at) as created_at,
+	            gi.raw_text as item_title
+	          from automation_runs ar
+	          left join grocery_items gi on gi.id = ar.grocery_item_id
+	          order by coalesce(ar.finished_at, ar.started_at) desc, ar.id desc
+	          limit 40
+	        `
+	        )
+	        .all()
+	        .map((row) => ({
+	          ...(row as Record<string, unknown>),
+	          title: automationActionTitle(String((row as { action: string }).action))
+	        }));
 	    },
 	    upsertCatalogItems(items) {
 	      const now = new Date().toISOString();
@@ -943,6 +968,17 @@ function reminderDeletionForItem(raw: Database.Database, itemId: number): Dashbo
         productUrl: row.product_url
       }
     : null;
+}
+
+function automationActionTitle(action: string): string {
+  const words: Record<string, string> = {
+    catalog_sync: "Catalog sync",
+    order_check: "Order check",
+    add_to_cart: "Add to cart",
+    remove_from_cart: "Remove from cart",
+    fulfill_reminder: "Fulfill reminder"
+  };
+  return words[action] ?? action.replaceAll("_", " ");
 }
 
 function chooseProduct(

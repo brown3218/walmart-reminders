@@ -47,7 +47,7 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
   });
 
   app.get("/api/history", requirePin(dashboardPin), (_req, res) => {
-    res.json({ items: db.listHistory() });
+    res.json({ items: db.listHistory(), activity: db.listActivity() });
   });
 
   app.get("/api/events", requirePin(dashboardPin, { allowQueryPin: true }), (req, res) => {

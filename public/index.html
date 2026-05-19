@@ -449,10 +449,10 @@
         }
         const status = await statusResponse.json();
         const itemBody = await itemResponse.json();
-        const history = historyResponse.ok ? await historyResponse.json() : { items: [] };
+        const history = historyResponse.ok ? await historyResponse.json() : { items: [], activity: [] };
         items = itemBody.items || [];
         renderStatus(status);
-        renderSections(items, history.items || []);
+        renderSections(items, history.activity || history.items || []);
       }
 
       function connectEvents() {
@@ -529,6 +529,7 @@
       }
 
       function row(item, compact) {
+        if (item.type === "automation") return activityRow(item);
         return `
           <button class="item-row" onclick="openProposal(${Number(item.id)})">
             ${thumb(item)}
@@ -542,6 +543,22 @@
               </span>
             </span>
           </button>
+        `;
+      }
+
+      function activityRow(item) {
+        return `
+          <div class="item-row">
+            <span class="thumb">${escapeHtml(String(item.title || "?").slice(0, 2).toUpperCase())}</span>
+            <span>
+              <span class="item-title">${escapeHtml(item.title || "Activity")}</span>
+              <span class="candidate">${escapeHtml(item.detail || item.item_title || shortTime(item.created_at))}</span>
+              <span class="badges">
+                <span class="badge ${tone(item.status)}">${label(item.status)}</span>
+                <span class="badge">${shortTime(item.created_at)}</span>
+              </span>
+            </span>
+          </div>
         `;
       }
 

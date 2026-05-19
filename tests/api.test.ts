@@ -273,6 +273,33 @@ describe("dashboard API", () => {
     }
   });
 
+  it("includes Walmart automation runs in dashboard activity history", async () => {
+    const db = createDatabase(":memory:");
+    db.recordAutomationRun("catalog_sync", "manual_action", "Walmart verification required.");
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/history`, {
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      const body = await response.json();
+
+      expect(body.activity[0]).toMatchObject({
+        type: "automation",
+        action: "catalog_sync",
+        status: "manual_action",
+        title: "Catalog sync",
+        detail: "Walmart verification required."
+      });
+    } finally {
+      server.close();
+    }
+  });
+
   it("lets the user mark an item added manually after opening Walmart", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({

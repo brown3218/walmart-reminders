@@ -53,6 +53,12 @@ describe("dashboard markup", () => {
     expect(dashboardHtml).toContain('syncLabel(syncRows, "walmart_orders")');
   });
 
+  it("renders automation activity from the history API", () => {
+    expect(dashboardHtml).toContain("history.activity || history.items || []");
+    expect(dashboardHtml).toContain("activityRow");
+    expect(dashboardHtml).toContain("item.type === \"automation\"");
+  });
+
   it("uses explicit proposal action labels from the phone workflow", () => {
     expect(dashboardHtml).toContain('id="searchAlternatives">Search alternatives</button>');
     expect(dashboardHtml).toContain('id="openCandidate">Open Walmart</button>');
