@@ -35,17 +35,17 @@ describe("database order reconciliation", () => {
 
     expect(stored).toBe(1);
     expect(result).toEqual([
-      {
+      expect.objectContaining({
         itemId: Number(item.id),
         orderId: "order-1",
         reason: "product_url",
-        reminder: {
+        reminder: expect.objectContaining({
           externalId: "r1",
           action: "complete",
           needsCartRemoval: false,
           itemId: Number(item.id)
-        }
-      }
+        })
+      })
     ]);
     expect(db.listItems()).toEqual([]);
     expect(db.listItems({ includeInactive: true })[0]).toMatchObject({ status: "fulfilled" });

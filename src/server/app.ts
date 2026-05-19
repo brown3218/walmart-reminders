@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import type pino from "pino";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
-import type { AppDatabase } from "../db/database.js";
+import type { AppDatabase, DashboardDeletion } from "../db/database.js";
 import { applyReminderDisposition } from "../reminders/actions.js";
 import { pollRemindersOnce } from "../reminders/poller.js";
 import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } from "../walmart/automation.js";
@@ -186,7 +186,7 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
       action: config?.reminders.deleteAction ?? deletion.action
     };
     if (deletion.needsCartRemoval && config && logger) {
-      enqueueRemoveMatchedItemFromWalmart(db, config, logger, deletion.itemId);
+      enqueueRemoveMatchedItemFromWalmart(db, config, logger, deletion.itemId, cartRemovalTarget(deletion));
     }
     if (config && logger) {
       void applyReminderDisposition(config, logger, { externalId: deletion.externalId, reason: "delete" });
@@ -282,15 +282,14 @@ function enqueueAutoMatchedItems(db: AppDatabase, config: AppConfig, logger: pin
   }
 }
 
-function enqueueReminderDrivenCartRemovals(
-  db: AppDatabase,
-  config: AppConfig,
-  logger: pino.Logger,
-  removals: Array<{ itemId: number; needsCartRemoval: boolean }>
-): void {
+function enqueueReminderDrivenCartRemovals(db: AppDatabase, config: AppConfig, logger: pino.Logger, removals: DashboardDeletion[]): void {
   for (const removal of removals) {
     if (removal.needsCartRemoval) {
-      enqueueRemoveMatchedItemFromWalmart(db, config, logger, removal.itemId);
+      enqueueRemoveMatchedItemFromWalmart(db, config, logger, removal.itemId, cartRemovalTarget(removal));
     }
   }
+}
+
+function cartRemovalTarget(removal: DashboardDeletion): { title: string; url: string | null } | undefined {
+  return removal.productTitle ? { title: removal.productTitle, url: removal.productUrl ?? null } : undefined;
 }

@@ -70,6 +70,8 @@ export type DashboardDeletion = {
   action: "complete" | "delete";
   needsCartRemoval: boolean;
   itemId: number;
+  productTitle?: string;
+  productUrl?: string | null;
 };
 
 export type ReconciledFulfillment = FulfilledMatch & {
@@ -910,18 +912,25 @@ function reminderDeletionForItem(raw: Database.Database, itemId: number): Dashbo
     .prepare(
       `
       select r.external_id, gi.cart_status, gi.status
+        , coalesce(cp.title, gi.raw_text) as product_title
+        , cp.url as product_url
       from grocery_items gi
       join reminders r on r.id = gi.reminder_id
+      left join chosen_products cp on cp.grocery_item_id = gi.id
       where gi.id = ?
     `
     )
-    .get(itemId) as { external_id: string; cart_status: string; status: string } | undefined;
+    .get(itemId) as
+    | { external_id: string; cart_status: string; status: string; product_title: string; product_url: string | null }
+    | undefined;
   return row
     ? {
         externalId: row.external_id,
         action: "complete",
         itemId,
-        needsCartRemoval: row.cart_status === "added" || row.status === "added_to_cart"
+        needsCartRemoval: row.cart_status === "added" || row.status === "added_to_cart",
+        productTitle: row.product_title,
+        productUrl: row.product_url
       }
     : null;
 }

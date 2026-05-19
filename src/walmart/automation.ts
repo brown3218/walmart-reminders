@@ -8,6 +8,7 @@ import { removeApprovedItemFromCart } from "./removeFromCart.js";
 import { isWalmartProductUrl } from "./urls.js";
 
 const walmartAutomationQueue = createSerialAutomationQueue();
+export type CartRemovalTarget = { title: string; url: string | null };
 
 export function enqueueAddMatchedItemToWalmart(
   db: AppDatabase,
@@ -22,9 +23,10 @@ export function enqueueRemoveMatchedItemFromWalmart(
   db: AppDatabase,
   config: AppConfig,
   logger: pino.Logger,
-  itemId: number
+  itemId: number,
+  target?: CartRemovalTarget
 ): void {
-  void walmartAutomationQueue.enqueue(() => removeMatchedItemFromWalmart(db, config, logger, itemId));
+  void walmartAutomationQueue.enqueue(() => removeMatchedItemFromWalmart(db, config, logger, itemId, { target }));
 }
 
 export async function addMatchedItemToWalmart(
@@ -71,21 +73,26 @@ function numericQuantity(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-async function removeMatchedItemFromWalmart(
+export async function removeMatchedItemFromWalmart(
   db: AppDatabase,
   config: AppConfig,
   logger: pino.Logger,
-  itemId: number
+  itemId: number,
+  options: {
+    target?: CartRemovalTarget;
+    removeFromCart?: typeof removeApprovedItemFromCart;
+    runExclusive?: <T>(task: () => Promise<T>) => Promise<T>;
+  } = {}
 ): Promise<void> {
-  const chosen = db.getChosenProduct(itemId);
-  const title = String(chosen?.title ?? chosen?.raw_text ?? "");
-  const url = chosen?.url ? String(chosen.url) : null;
+  const chosen = options.target ? null : db.getChosenProduct(itemId);
+  const title = options.target?.title ?? String(chosen?.title ?? chosen?.raw_text ?? "");
+  const url = options.target?.url ?? (chosen?.url ? String(chosen.url) : null);
   if (!title) return;
 
   try {
-    const result = await runExclusiveWalmartProfileTask(() =>
-      removeApprovedItemFromCart(resolveProjectPath(config.walmart.profileDir), { title, url })
-    );
+    const removeFromCart = options.removeFromCart ?? removeApprovedItemFromCart;
+    const runExclusive = options.runExclusive ?? runExclusiveWalmartProfileTask;
+    const result = await runExclusive(() => removeFromCart(resolveProjectPath(config.walmart.profileDir), { title, url }));
     if (result.status === "removed") {
       db.markItemCartRemoved(itemId, result.message);
     } else {

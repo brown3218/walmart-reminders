@@ -24,7 +24,11 @@ export function applyReminderSnapshot(db: AppDatabase, snapshot: ReminderInput[]
   for (const entry of snapshot) {
     const existing = previous.find((candidate) => candidate.external_id === entry.externalId);
     if (!existing) result.created += 1;
-    else if (!entry.completed && existing.title !== entry.title) result.updated += 1;
+    else if (!entry.completed && existing.title !== entry.title) {
+      result.updated += 1;
+      const removal = cartRemovalTargetForReminderEdit(db, entry.externalId);
+      if (removal?.needsCartRemoval) result.cartRemovals.push(removal);
+    }
     else if (entry.completed && !existing.completed) {
       result.completed += 1;
       const deletion = deleteActiveItemForReminder(db, entry.externalId);
@@ -48,4 +52,27 @@ export function applyReminderSnapshot(db: AppDatabase, snapshot: ReminderInput[]
 function deleteActiveItemForReminder(db: AppDatabase, externalId: string): DashboardDeletion | null {
   const item = db.listItems().find((candidate) => candidate.external_id === externalId) as { id: number } | undefined;
   return item ? db.deleteItem(Number(item.id), "reminder_snapshot") : null;
+}
+
+function cartRemovalTargetForReminderEdit(db: AppDatabase, externalId: string): DashboardDeletion | null {
+  const item = db.listItems().find((candidate) => candidate.external_id === externalId) as
+    | {
+        id: number;
+        status: string;
+        cart_status: string;
+        chosen_title?: string | null;
+        chosen_url?: string | null;
+        raw_text: string;
+      }
+    | undefined;
+  if (!item) return null;
+  const needsCartRemoval = item.cart_status === "added" || item.status === "added_to_cart";
+  return {
+    externalId,
+    action: "complete",
+    itemId: Number(item.id),
+    needsCartRemoval,
+    productTitle: item.chosen_title ?? item.raw_text,
+    productUrl: item.chosen_url ?? null
+  };
 }

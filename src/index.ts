@@ -3,6 +3,7 @@ import https from "node:https";
 import pino from "pino";
 import { loadConfig, resolveProjectPath } from "./config/config.js";
 import { createDatabase } from "./db/database.js";
+import type { DashboardDeletion } from "./db/database.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "./network/urls.js";
 import { startReminderPoller } from "./reminders/poller.js";
 import { createApp } from "./server/app.js";
@@ -101,10 +102,14 @@ function enqueueAutoMatchedItems(): void {
   }
 }
 
-function enqueueReminderDrivenCartRemovals(removals: Array<{ itemId: number; needsCartRemoval: boolean }>): void {
+function enqueueReminderDrivenCartRemovals(removals: DashboardDeletion[]): void {
   for (const removal of removals) {
     if (removal.needsCartRemoval) {
-      enqueueRemoveMatchedItemFromWalmart(db, config, logger, removal.itemId);
+      enqueueRemoveMatchedItemFromWalmart(db, config, logger, removal.itemId, cartRemovalTarget(removal));
     }
   }
+}
+
+function cartRemovalTarget(removal: DashboardDeletion): { title: string; url: string | null } | undefined {
+  return removal.productTitle ? { title: removal.productTitle, url: removal.productUrl ?? null } : undefined;
 }
