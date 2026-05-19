@@ -21,4 +21,9 @@ describe("dashboard markup", () => {
     expect(dashboardHtml).toContain('id="ordersStatus"');
     expect(dashboardHtml).toContain('syncLabel(syncRows, "walmart_orders")');
   });
+
+  it("uses explicit proposal action labels from the phone workflow", () => {
+    expect(dashboardHtml).toContain('id="searchAlternatives">Search alternatives</button>');
+    expect(dashboardHtml).toContain('id="openCandidate">Open Walmart</button>');
+  });
 });
