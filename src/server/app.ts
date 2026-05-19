@@ -6,7 +6,7 @@ import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import type { AppDatabase } from "../db/database.js";
 import { applyReminderDisposition } from "../reminders/actions.js";
 import { pollRemindersOnce } from "../reminders/poller.js";
-import { enqueueAddMatchedItemToWalmart } from "../walmart/automation.js";
+import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } from "../walmart/automation.js";
 import { scrapeRecentOrders } from "../walmart/orders.js";
 import { scrapeReorderCandidates } from "../walmart/reorderCatalog.js";
 import { searchWalmartProducts } from "../walmart/search.js";
@@ -172,6 +172,9 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
 
   app.post("/api/items/:id/delete", requirePin(dashboardPin), (req, res) => {
     const deletion = db.deleteItem(Number(req.params.id), "dashboard");
+    if (deletion.needsCartRemoval && config && logger) {
+      enqueueRemoveMatchedItemFromWalmart(db, config, logger, deletion.itemId);
+    }
     if (config && logger) {
       void applyReminderDisposition(config, logger, { externalId: deletion.externalId, reason: "delete" });
     }

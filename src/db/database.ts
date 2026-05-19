@@ -68,6 +68,8 @@ export type ListItemsOptions = {
 export type DashboardDeletion = {
   externalId: string;
   action: "complete" | "delete";
+  needsCartRemoval: boolean;
+  itemId: number;
 };
 
 export type AppDatabase = {
@@ -96,6 +98,8 @@ export type AppDatabase = {
   countsByStatus(): Record<string, number>;
   markItemAdding(itemId: number): void;
   markItemAdded(itemId: number, message: string): void;
+  markItemCartRemoved(itemId: number, message: string): void;
+  markItemCartRemovalManual(itemId: number, message: string): void;
   markItemManualAction(itemId: number, message: string): void;
   markItemFailed(itemId: number, message: string): void;
   markItemOrdered(itemId: number, message: string): void;
@@ -602,6 +606,7 @@ export function createDatabase(path: string): AppDatabase {
 	        skipped: 0,
 	        deleted: 0,
 	        no_match: 0,
+	        removed: 0,
 	        failed: 0
 	      };
 	      for (const row of rows) counts[row.status] = row.count;
@@ -637,6 +642,26 @@ export function createDatabase(path: string): AppDatabase {
 	        where id = (select id from automation_runs where grocery_item_id = ? order by id desc limit 1)
 	      `
 	      ).run(now, message, itemId);
+	    },
+	    markItemCartRemoved(itemId, message) {
+	      const now = new Date().toISOString();
+	      raw.prepare("update grocery_items set cart_status = 'removed', error_message = ?, updated_at = ? where id = ?").run(
+	        message,
+	        now,
+	        itemId
+	      );
+	      raw.prepare(
+	        "insert into automation_runs (grocery_item_id, action, status, started_at, finished_at, error_message) values (?, 'remove_from_cart', 'removed', ?, ?, ?)"
+	      ).run(itemId, now, now, message);
+	    },
+	    markItemCartRemovalManual(itemId, message) {
+	      const now = new Date().toISOString();
+	      raw.prepare(
+	        "update grocery_items set cart_status = 'manual_action', error_message = ?, updated_at = ? where id = ?"
+	      ).run(message, now, itemId);
+	      raw.prepare(
+	        "insert into automation_runs (grocery_item_id, action, status, started_at, finished_at, error_message) values (?, 'remove_from_cart', 'manual_action', ?, ?, ?)"
+	      ).run(itemId, now, now, message);
 	    },
 	    markItemManualAction(itemId, message) {
 	      const now = new Date().toISOString();
@@ -704,10 +729,30 @@ export function createDatabase(path: string): AppDatabase {
 	      raw.prepare(
 	        `
 	        update grocery_items
-	        set status = 'deleted', deleted_at = coalesce(deleted_at, ?), updated_at = ?
+	        set status = 'deleted',
+	            cart_status = case when ? = 1 then 'manual_action' else cart_status end,
+	            error_message = case
+	              when ? = 1 then 'Item was removed locally; remove it from the Walmart cart if it is still present.'
+	              else error_message
+	            end,
+	            deleted_at = coalesce(deleted_at, ?),
+	            updated_at = ?
 	        where id = ?
 	      `
-	      ).run(now, now, itemId);
+	      ).run(deletion.needsCartRemoval ? 1 : 0, deletion.needsCartRemoval ? 1 : 0, now, now, itemId);
+	      if (deletion.needsCartRemoval) {
+	        raw.prepare(
+	          `
+	          insert into automation_runs (grocery_item_id, action, status, started_at, finished_at, error_message)
+	          values (?, 'remove_from_cart', 'manual_action', ?, ?, ?)
+	        `
+	        ).run(
+	          itemId,
+	          now,
+	          now,
+	          "Item was removed locally; remove it from the Walmart cart if it is still present."
+	        );
+	      }
 	      raw.prepare(
 	        `
 	        update reminders
@@ -837,14 +882,21 @@ function reminderDeletionForItem(raw: Database.Database, itemId: number): Dashbo
   const row = raw
     .prepare(
       `
-      select r.external_id
+      select r.external_id, gi.cart_status, gi.status
       from grocery_items gi
       join reminders r on r.id = gi.reminder_id
       where gi.id = ?
     `
     )
-    .get(itemId) as { external_id: string } | undefined;
-  return row ? { externalId: row.external_id, action: "complete" } : null;
+    .get(itemId) as { external_id: string; cart_status: string; status: string } | undefined;
+  return row
+    ? {
+        externalId: row.external_id,
+        action: "complete",
+        itemId,
+        needsCartRemoval: row.cart_status === "added" || row.status === "added_to_cart"
+      }
+    : null;
 }
 
 function chooseProduct(
