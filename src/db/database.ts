@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { matchAgainstReorderCatalog, type ReorderCatalogItem } from "../matching/reorderMatcher.js";
+import { findFulfilledItems, type FulfilledMatch, type WalmartOrderSnapshot } from "../orders/reconciliation.js";
 import { parseGroceryText } from "../parser/groceryParser.js";
 import { schemaSql } from "./schema.js";
 
@@ -48,6 +49,18 @@ export type MatchPendingResult = {
   noMatch: number;
 };
 
+export type OrderInput = WalmartOrderSnapshot & {
+  status?: string | null;
+  items: Array<{
+    productId?: string | null;
+    title: string;
+    url?: string | null;
+    imageUrl?: string | null;
+    priceText?: string | null;
+    quantity?: number | null;
+  }>;
+};
+
 export type ListItemsOptions = {
   includeInactive?: boolean;
 };
@@ -66,6 +79,8 @@ export type AppDatabase = {
   listHistory(): Record<string, unknown>[];
   upsertCatalogItems(items: CatalogItemInput[]): number;
   matchPendingItems(thresholds: MatchThresholds): MatchPendingResult;
+  upsertOrders(orders: OrderInput[]): number;
+  reconcileOrders(): FulfilledMatch[];
   replaceCandidates(itemId: number, candidates: ProductCandidateInput[]): void;
   approveItem(input: {
     itemId: number;
@@ -360,6 +375,94 @@ export function createDatabase(path: string): AppDatabase {
 	      }
 
 	      return result;
+	    },
+	    upsertOrders(orders) {
+	      const now = new Date().toISOString();
+	      const tx = raw.transaction(() => {
+	        for (const order of orders) {
+	          raw.prepare(
+	            `
+	            insert into walmart_orders (order_id, placed_at, status, source, raw_json, first_seen_at, last_seen_at)
+	            values (@orderId, @placedAt, @status, 'scrape', @rawJson, @now, @now)
+	            on conflict(order_id) do update set
+	              placed_at = excluded.placed_at,
+	              status = excluded.status,
+	              raw_json = excluded.raw_json,
+	              last_seen_at = excluded.last_seen_at
+	          `
+	          ).run({
+	            orderId: order.orderId,
+	            placedAt: order.placedAt,
+	            status: order.status ?? null,
+	            rawJson: JSON.stringify(order),
+	            now
+	          });
+	          const orderRow = raw.prepare("select id from walmart_orders where order_id = ?").get(order.orderId) as
+	            | { id: number }
+	            | undefined;
+	          if (!orderRow) continue;
+	          for (const item of order.items) {
+	            raw.prepare(
+	              `
+	              insert into walmart_order_items (
+	                order_id, product_id, title, normalized_title, url, image_url, price_text, quantity
+	              )
+	              values (@orderRowId, @productId, @title, @normalizedTitle, @url, @imageUrl, @priceText, @quantity)
+	              on conflict(order_id, title, url) do update set
+	                product_id = excluded.product_id,
+	                normalized_title = excluded.normalized_title,
+	                image_url = excluded.image_url,
+	                price_text = excluded.price_text,
+	                quantity = excluded.quantity
+	            `
+	            ).run({
+	              orderRowId: orderRow.id,
+	              productId: item.productId ?? null,
+	              title: item.title,
+	              normalizedTitle: parseGroceryText(item.title).normalizedText,
+	              url: item.url ?? null,
+	              imageUrl: item.imageUrl ?? null,
+	              priceText: item.priceText ?? null,
+	              quantity: item.quantity ?? null
+	            });
+	          }
+	        }
+	      });
+	      tx();
+	      return orders.length;
+	    },
+	    reconcileOrders() {
+	      const items = raw
+	        .prepare(
+	          `
+	          select
+	            gi.id as itemId,
+	            gi.status,
+	            cp.url as productUrl,
+	            coalesce(cp.title, gi.raw_text) as productTitle
+	          from grocery_items gi
+	          left join chosen_products cp on cp.grocery_item_id = gi.id
+	          where gi.deleted_at is null
+	            and gi.status in ('approved', 'adding', 'added_to_cart', 'manual_action', 'ordered')
+	        `
+	        )
+	        .all() as Array<{ itemId: number; status: string; productUrl: string | null; productTitle: string }>;
+	      const orderRows = raw
+	        .prepare("select id, order_id as orderId, placed_at as placedAt from walmart_orders order by coalesce(placed_at, last_seen_at) desc")
+	        .all() as Array<{ id: number; orderId: string; placedAt: string | null }>;
+	      const orders = orderRows.map((order) => ({
+	        orderId: order.orderId,
+	        placedAt: order.placedAt,
+	        items: raw
+	          .prepare("select title, url, product_id as productId from walmart_order_items where order_id = ?")
+	          .all(order.id) as Array<{ title: string; url: string | null; productId: string | null }>
+	      }));
+	      const matches = findFulfilledItems(items, orders);
+	      for (const match of matches) {
+	        this.markItemOrdered(match.itemId, `Matched Walmart order ${match.orderId}.`);
+	        this.fulfillItem(match.itemId, "order_reconciliation");
+	      }
+	      return matches;
 	    },
     replaceCandidates(itemId, candidates) {
       const now = new Date().toISOString();

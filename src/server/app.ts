@@ -7,6 +7,7 @@ import type { AppDatabase } from "../db/database.js";
 import { applyReminderDisposition } from "../reminders/actions.js";
 import { pollRemindersOnce } from "../reminders/poller.js";
 import { enqueueAddMatchedItemToWalmart } from "../walmart/automation.js";
+import { scrapeRecentOrders } from "../walmart/orders.js";
 import { scrapeReorderCandidates } from "../walmart/reorderCatalog.js";
 import { searchWalmartProducts } from "../walmart/search.js";
 
@@ -126,12 +127,25 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     }
   });
 
-  app.post("/api/sync/orders", requirePin(dashboardPin), (_req, res) => {
-    db.setSyncState("walmart_orders", "manual_available", "Live order scraping requires a verified Walmart session.");
-    res.status(202).json({
-      ok: true,
-      message: "Order reconciliation hooks are installed; use Mark Ordered until live Walmart order scraping is verified."
-    });
+  app.post("/api/sync/orders", requirePin(dashboardPin), async (_req, res) => {
+    if (!config || !logger) {
+      res.status(503).json({ error: "Walmart order sync is not configured in this process." });
+      return;
+    }
+    try {
+      db.setSyncState("walmart_orders", "running");
+      const orders = await scrapeRecentOrders(resolveProjectPath(config.walmart.profileDir));
+      const stored = db.upsertOrders(orders);
+      const fulfilled = db.reconcileOrders();
+      db.setSyncState("walmart_orders", "ok");
+      res.status(202).json({ ok: true, orders: stored, fulfilled });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      db.setSyncState("walmart_orders", "manual_action", message);
+      db.updateWalmartSession("needs_manual_action", message, true);
+      logger.warn({ error: message }, "walmart order sync needs manual action");
+      res.status(409).json({ error: message });
+    }
   });
 
   app.post("/api/items/:id/approve", requirePin(dashboardPin), (req, res) => {
