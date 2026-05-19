@@ -63,4 +63,14 @@ describe("catalog persistence and pending item matching", () => {
     expect(result).toMatchObject({ noMatch: 1 });
     expect(db.listItems()[0]).toMatchObject({ status: "no_match" });
   });
+
+  it("keeps items unmatched when Walmart search returns no alternatives", () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({ externalId: "r1", listId: "walmart", title: "dragon fruit", notes: null, completed: false });
+    const item = db.listItems()[0];
+
+    db.replaceCandidates(Number(item.id), []);
+
+    expect(db.listItems()[0]).toMatchObject({ status: "no_match", candidate_title: null });
+  });
 });

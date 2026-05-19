@@ -499,7 +499,8 @@ export function createDatabase(path: string): AppDatabase {
 	            now
 	          });
 	        }
-	        raw.prepare("update grocery_items set status = 'needs_review', error_message = null, updated_at = ? where id = ?").run(
+	        raw.prepare("update grocery_items set status = ?, error_message = null, updated_at = ? where id = ?").run(
+	          candidates.length > 0 ? "needs_review" : "no_match",
 	          now,
 	          itemId
 	        );
