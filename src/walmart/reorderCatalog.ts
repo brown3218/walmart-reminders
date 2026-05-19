@@ -8,6 +8,7 @@ export type WalmartReorderCandidate = {
   url: string;
   priceText: string | null;
   imageUrl: string | null;
+  source?: "reorder" | "favorites";
 };
 
 export async function openPersistentWalmartSession(profileDir: string): Promise<BrowserContext> {
@@ -21,35 +22,45 @@ export async function scrapeReorderCandidates(profileDir: string): Promise<Walma
   const context = await openPersistentWalmartSession(profileDir);
   const page = context.pages()[0] ?? (await context.newPage());
   try {
-    await page.goto("https://www.walmart.com/my-items/reorder", { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(3000);
-    if (detectWalmartManualAction(await page.locator("body").innerText({ timeout: 5000 }))) {
-      throw new Error(walmartManualActionMessage("catalog"));
-    }
-
-    const links = await page.locator('a[href*="/ip/"]').evaluateAll((anchors) =>
-      anchors
-        .map((anchor) => {
-          const element = anchor as HTMLAnchorElement;
-          const title = element.innerText.trim();
-          const url = element.href;
-          const card = element.closest("[data-item-id], article, div");
-          const priceText = card?.textContent?.match(/\$\d+(?:\.\d{2})?/)?.[0] ?? null;
-          const imageUrl = card?.querySelector("img")?.getAttribute("src") ?? null;
-          return { title, url, priceText, imageUrl };
-        })
-        .filter((item) => item.title.length > 3 && item.url.includes("/ip/"))
-    );
-
     const deduped = new Map<string, WalmartReorderCandidate>();
-    for (const link of links) {
-      deduped.set(link.url, {
-        ...link,
-        normalizedTitle: normalizeText(link.title)
-      });
+    for (const source of catalogSources) {
+      await page.goto(source.url, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(3000);
+      if (detectWalmartManualAction(await page.locator("body").innerText({ timeout: 5000 }))) {
+        throw new Error(walmartManualActionMessage("catalog"));
+      }
+
+      const links = await page.locator('a[href*="/ip/"]').evaluateAll((anchors) =>
+        anchors
+          .map((anchor) => {
+            const element = anchor as HTMLAnchorElement;
+            const title = element.innerText.trim();
+            const url = element.href;
+            const card = element.closest("[data-item-id], article, div");
+            const priceText = card?.textContent?.match(/\$\d+(?:\.\d{2})?/)?.[0] ?? null;
+            const imageUrl = card?.querySelector("img")?.getAttribute("src") ?? null;
+            return { title, url, priceText, imageUrl };
+          })
+          .filter((item) => item.title.length > 3 && item.url.includes("/ip/"))
+      );
+
+      for (const link of links) {
+        if (deduped.has(link.url)) continue;
+        deduped.set(link.url, {
+          ...link,
+          normalizedTitle: normalizeText(link.title),
+          source: source.name
+        });
+      }
     }
     return [...deduped.values()];
   } finally {
     await context.close();
   }
 }
+
+const catalogSources = [
+  { name: "reorder" as const, url: "https://www.walmart.com/my-items/reorder" },
+  { name: "favorites" as const, url: "https://www.walmart.com/lists/favorites" },
+  { name: "favorites" as const, url: "https://www.walmart.com/my-items" }
+];

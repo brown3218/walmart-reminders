@@ -53,6 +53,32 @@ describe("Walmart sync services", () => {
     });
   });
 
+  it("preserves favorites as a catalog source for safer auto-add decisions", async () => {
+    const db = createDatabase(":memory:");
+
+    await runWalmartCatalogSync({
+      db,
+      config,
+      logger,
+      scrape: async () => [
+        {
+          title: "Favorite Yogurt",
+          normalizedTitle: "favorite yogurt",
+          url: "https://www.walmart.com/ip/yogurt/123",
+          imageUrl: "https://example.test/yogurt.jpg",
+          priceText: "$3.48",
+          source: "favorites"
+        }
+      ],
+      enqueueAdd: () => undefined,
+      profileQueue: profileQueue()
+    });
+
+    expect(db.raw.prepare("select source from walmart_catalog_items where url = ?").get("https://www.walmart.com/ip/yogurt/123")).toEqual({
+      source: "favorites"
+    });
+  });
+
   it("syncs orders, fulfills matches, and applies reminder disposition", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({ externalId: "r2", listId: "walmart", title: "eggs", notes: null, completed: false });

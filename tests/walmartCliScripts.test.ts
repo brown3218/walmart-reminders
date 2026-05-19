@@ -22,4 +22,12 @@ describe("Walmart CLI sync scripts", () => {
 
     expect(source).toContain("runExclusiveWalmartProfileTask");
   });
+
+  it("scrapes both reorder and favorites catalog sources", () => {
+    const source = fs.readFileSync("src/walmart/reorderCatalog.ts", "utf8");
+
+    expect(source).toContain("https://www.walmart.com/my-items/reorder");
+    expect(source).toContain("https://www.walmart.com/lists/favorites");
+    expect(source).toContain("https://www.walmart.com/my-items");
+  });
 });

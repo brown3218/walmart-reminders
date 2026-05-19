@@ -37,7 +37,7 @@ export async function runWalmartCatalogSync(input: {
         priceText: candidate.priceText,
         sizeText: null,
         brand: null,
-        source: "reorder"
+        source: candidate.source ?? "reorder"
       }))
     );
     const matches = input.db.matchPendingItems({
