@@ -74,8 +74,13 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     try {
       db.setSyncState("reminders", "running");
       const result = await pollRemindersOnce(db, config);
+      const matches = db.matchPendingItems({
+        autoAddThreshold: config.walmart.autoAddThreshold,
+        proposeThreshold: config.walmart.proposeThreshold
+      });
+      enqueueAutoMatchedItems(db, config, logger);
       db.setSyncState("reminders", "ok");
-      res.status(202).json({ ok: true, result });
+      res.status(202).json({ ok: true, result, matches });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       db.setSyncState("reminders", "failed", message);
@@ -92,9 +97,27 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     try {
       db.setSyncState("walmart_catalog", "running");
       const candidates = await scrapeReorderCandidates(resolveProjectPath(config.walmart.profileDir));
+      db.upsertCatalogItems(
+        candidates.map((candidate) => ({
+          productId: null,
+          title: candidate.title,
+          normalizedTitle: candidate.normalizedTitle,
+          url: candidate.url,
+          imageUrl: candidate.imageUrl,
+          priceText: candidate.priceText,
+          sizeText: null,
+          brand: null,
+          source: "reorder"
+        }))
+      );
+      const matches = db.matchPendingItems({
+        autoAddThreshold: config.walmart.autoAddThreshold,
+        proposeThreshold: config.walmart.proposeThreshold
+      });
+      if (logger) enqueueAutoMatchedItems(db, config, logger);
       db.setSyncState("walmart_catalog", "ok");
       db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart reorder items.`, false);
-      res.status(202).json({ ok: true, candidates: candidates.length });
+      res.status(202).json({ ok: true, candidates: candidates.length, matches });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       db.setSyncState("walmart_catalog", "manual_action", message);
@@ -217,4 +240,12 @@ function requirePin(pin: string | null): express.RequestHandler {
     if (req.header("x-dashboard-pin") === pin) return next();
     res.status(401).json({ error: "dashboard PIN required" });
   };
+}
+
+function enqueueAutoMatchedItems(db: AppDatabase, config: AppConfig, logger: pino.Logger): void {
+  for (const item of db.listItems()) {
+    if (item.status === "auto_matched" && item.cart_status === "not_added") {
+      enqueueAddMatchedItemToWalmart(db, config, logger, Number(item.id));
+    }
+  }
 }

@@ -11,9 +11,27 @@ const db = createDatabase(dbPath);
 try {
   db.setSyncState("walmart_catalog", "running");
   const candidates = await scrapeReorderCandidates(resolveProjectPath(config.walmart.profileDir));
+  db.upsertCatalogItems(
+    candidates.map((candidate) => ({
+      productId: null,
+      title: candidate.title,
+      normalizedTitle: candidate.normalizedTitle,
+      url: candidate.url,
+      imageUrl: candidate.imageUrl,
+      priceText: candidate.priceText,
+      sizeText: null,
+      brand: null,
+      source: "reorder"
+    }))
+  );
+  const matches = db.matchPendingItems({
+    autoAddThreshold: config.walmart.autoAddThreshold,
+    proposeThreshold: config.walmart.proposeThreshold
+  });
   db.setSyncState("walmart_catalog", "ok");
   db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart reorder candidates.`, false);
   console.log(`Captured ${candidates.length} Walmart reorder candidates.`);
+  console.log(`Matched ${matches.autoMatched}, proposed ${matches.needsReview}, no match ${matches.noMatch}.`);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   db.setSyncState("walmart_catalog", "manual_action", message);

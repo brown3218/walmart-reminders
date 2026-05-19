@@ -6,6 +6,7 @@ import { createDatabase } from "./db/database.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "./network/urls.js";
 import { startReminderPoller } from "./reminders/poller.js";
 import { createApp } from "./server/app.js";
+import { enqueueAddMatchedItemToWalmart } from "./walmart/automation.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const config = loadConfig();
@@ -14,7 +15,19 @@ fs.mkdirSync(new URL(".", `file://${dbPath}`).pathname, { recursive: true });
 
 const db = createDatabase(dbPath);
 const app = createApp({ db, dashboardPin: config.dashboard.pin, config, logger });
-startReminderPoller({ db, config, logger });
+startReminderPoller({
+  db,
+  config,
+  logger,
+  afterPoll: () => {
+    const matches = db.matchPendingItems({
+      autoAddThreshold: config.walmart.autoAddThreshold,
+      proposeThreshold: config.walmart.proposeThreshold
+    });
+    enqueueAutoMatchedItems();
+    logger.info(matches, "pending reminders matched after poll");
+  }
+});
 
 app.listen(config.dashboard.port, config.dashboard.host, () => {
   const lanAddress = pickLanAddress();
@@ -61,5 +74,13 @@ if (config.dashboard.https.enabled) {
       { error: error instanceof Error ? error.message : String(error), certPath, keyPath },
       "HTTPS dashboard requested but certificate files could not be loaded"
     );
+  }
+}
+
+function enqueueAutoMatchedItems(): void {
+  for (const item of db.listItems()) {
+    if (item.status === "auto_matched" && item.cart_status === "not_added") {
+      enqueueAddMatchedItemToWalmart(db, config, logger, Number(item.id));
+    }
   }
 }

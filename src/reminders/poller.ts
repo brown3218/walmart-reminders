@@ -12,12 +12,14 @@ export type ReminderPollerOptions = {
   db: AppDatabase;
   config: AppConfig;
   logger: pino.Logger;
+  afterPoll?: (result: { ingested: number; skipped: number }) => void | Promise<void>;
 };
 
-export function startReminderPoller({ db, config, logger }: ReminderPollerOptions): NodeJS.Timeout {
+export function startReminderPoller({ db, config, logger, afterPoll }: ReminderPollerOptions): NodeJS.Timeout {
   const run = async () => {
     try {
       const result = await pollRemindersOnce(db, config);
+      await afterPoll?.(result);
       logger.info(result, "reminders poll complete");
     } catch (error) {
       logger.warn({ error: error instanceof Error ? error.message : String(error) }, "reminders poll failed");

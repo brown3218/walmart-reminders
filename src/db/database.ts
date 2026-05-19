@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { matchAgainstReorderCatalog, type ReorderCatalogItem } from "../matching/reorderMatcher.js";
 import { parseGroceryText } from "../parser/groceryParser.js";
 import { schemaSql } from "./schema.js";
 
@@ -24,6 +25,29 @@ export type ProductCandidateInput = {
   source: string;
 };
 
+export type CatalogItemInput = {
+  productId: string | null;
+  title: string;
+  normalizedTitle: string;
+  url: string;
+  imageUrl: string | null;
+  priceText: string | null;
+  sizeText: string | null;
+  brand: string | null;
+  source: string;
+};
+
+export type MatchThresholds = {
+  autoAddThreshold: number;
+  proposeThreshold: number;
+};
+
+export type MatchPendingResult = {
+  autoMatched: number;
+  needsReview: number;
+  noMatch: number;
+};
+
 export type ListItemsOptions = {
   includeInactive?: boolean;
 };
@@ -40,6 +64,8 @@ export type AppDatabase = {
   listItems(options?: ListItemsOptions): Record<string, unknown>[];
   listApprovals(): Record<string, unknown>[];
   listHistory(): Record<string, unknown>[];
+  upsertCatalogItems(items: CatalogItemInput[]): number;
+  matchPendingItems(thresholds: MatchThresholds): MatchPendingResult;
   replaceCandidates(itemId: number, candidates: ProductCandidateInput[]): void;
   approveItem(input: {
     itemId: number;
@@ -175,6 +201,165 @@ export function createDatabase(path: string): AppDatabase {
 	    },
 	    listHistory() {
 	      return listItemsQuery(raw, true, null, 80);
+	    },
+	    upsertCatalogItems(items) {
+	      const now = new Date().toISOString();
+	      const tx = raw.transaction(() => {
+	        for (const item of items) {
+	          raw.prepare(
+	            `
+	            insert into walmart_catalog_items (
+	              product_id, title, normalized_title, url, image_url, price_text,
+	              size_text, brand, source, first_seen_at, last_seen_at, active
+	            )
+	            values (
+	              @productId, @title, @normalizedTitle, @url, @imageUrl, @priceText,
+	              @sizeText, @brand, @source, @now, @now, 1
+	            )
+	            on conflict(url) do update set
+	              product_id = excluded.product_id,
+	              title = excluded.title,
+	              normalized_title = excluded.normalized_title,
+	              image_url = excluded.image_url,
+	              price_text = excluded.price_text,
+	              size_text = excluded.size_text,
+	              brand = excluded.brand,
+	              source = excluded.source,
+	              last_seen_at = excluded.last_seen_at,
+	              active = 1
+	          `
+	          ).run({ ...item, now });
+	        }
+	      });
+	      tx();
+	      return items.length;
+	    },
+	    matchPendingItems(thresholds) {
+	      const pending = raw
+	        .prepare(
+	          `
+	          select gi.id, gi.raw_text, gi.normalized_text
+	          from grocery_items gi
+	          join reminders r on r.id = gi.reminder_id
+	          where gi.deleted_at is null
+	            and r.completed = 0
+	            and gi.status in ('parsed', 'no_match', 'failed')
+	          order by gi.created_at asc, gi.id asc
+	        `
+	        )
+	        .all() as { id: number; raw_text: string; normalized_text: string }[];
+	      const catalog = raw
+	        .prepare(
+	          `
+	          select
+	            id,
+	            product_id,
+	            title,
+	            normalized_title as normalizedTitle,
+	            url,
+	            brand,
+	            size_text as sizeText,
+	            price_text as priceText,
+	            image_url as imageUrl,
+	            source
+	          from walmart_catalog_items
+	          where active = 1
+	          order by
+	            case source when 'reorder' then 1 when 'favorites' then 2 when 'manual' then 3 else 4 end,
+	            last_seen_at desc
+	        `
+	        )
+	        .all() as Array<
+	        ReorderCatalogItem & {
+	          product_id: string | null;
+	          priceText: string | null;
+	          imageUrl: string | null;
+	          source: string;
+	        }
+	      >;
+	      const result: MatchPendingResult = { autoMatched: 0, needsReview: 0, noMatch: 0 };
+	      const now = new Date().toISOString();
+
+	      for (const item of pending) {
+	        const trusted = raw
+	          .prepare("select * from phrase_mappings where phrase = ? and trusted = 1")
+	          .get(item.normalized_text) as
+	          | { walmart_product_id: string | null; url: string; title: string }
+	          | undefined;
+	        if (trusted) {
+	          chooseProduct(raw, {
+	            itemId: item.id,
+	            candidateId: null,
+	            walmartProductId: trusted.walmart_product_id,
+	            url: trusted.url,
+	            title: trusted.title,
+	            imageUrl: null,
+	            chosenBy: "trusted",
+	            status: "auto_matched",
+	            now
+	          });
+	          result.autoMatched += 1;
+	          continue;
+	        }
+
+	        const decision = matchAgainstReorderCatalog(parseGroceryText(item.raw_text), catalog);
+	        const best = decision.bestMatch
+	          ? catalog.find((candidate) => candidate.id === decision.bestMatch?.id)
+	          : undefined;
+	        if (!best || decision.confidence < thresholds.proposeThreshold) {
+	          raw.prepare(
+	            "update grocery_items set status = 'no_match', error_message = null, updated_at = ? where id = ?"
+	          ).run(now, item.id);
+	          result.noMatch += 1;
+	          continue;
+	        }
+
+	        if (decision.confidence >= thresholds.autoAddThreshold && ["reorder", "favorites", "manual"].includes(best.source)) {
+	          chooseProduct(raw, {
+	            itemId: item.id,
+	            candidateId: null,
+	            walmartProductId: best.product_id,
+	            url: best.url,
+	            title: best.title,
+	            imageUrl: best.imageUrl,
+	            chosenBy: "auto",
+	            status: "auto_matched",
+	            now
+	          });
+	          result.autoMatched += 1;
+	          continue;
+	        }
+
+	        raw.prepare("delete from product_candidates where grocery_item_id = ?").run(item.id);
+	        raw.prepare(
+	          `
+	          insert into product_candidates (
+	            grocery_item_id, catalog_item_id, walmart_product_id, title, url, price_text,
+	            size_text, availability_text, image_url, confidence, source, captured_at
+	          )
+	          values (?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?)
+	        `
+	        ).run(
+	          item.id,
+	          best.id,
+	          best.product_id,
+	          best.title,
+	          best.url,
+	          best.priceText,
+	          best.sizeText ?? null,
+	          best.imageUrl,
+	          decision.confidence,
+	          best.source,
+	          now
+	        );
+	        raw.prepare("update grocery_items set status = 'needs_review', error_message = null, updated_at = ? where id = ?").run(
+	          now,
+	          item.id
+	        );
+	        result.needsReview += 1;
+	      }
+
+	      return result;
 	    },
     replaceCandidates(itemId, candidates) {
       const now = new Date().toISOString();
@@ -313,6 +498,7 @@ export function createDatabase(path: string): AppDatabase {
 	        fulfilled: 0,
 	        skipped: 0,
 	        deleted: 0,
+	        no_match: 0,
 	        failed: 0
 	      };
 	      for (const row of rows) counts[row.status] = row.count;
@@ -556,6 +742,51 @@ function reminderDeletionForItem(raw: Database.Database, itemId: number): Dashbo
     )
     .get(itemId) as { external_id: string } | undefined;
   return row ? { externalId: row.external_id, action: "complete" } : null;
+}
+
+function chooseProduct(
+  raw: Database.Database,
+  input: {
+    itemId: number;
+    candidateId: number | null;
+    walmartProductId: string | null;
+    url: string;
+    title: string;
+    imageUrl: string | null;
+    chosenBy: string;
+    status: "auto_matched" | "approved";
+    now: string;
+  }
+): void {
+  raw.prepare(
+    `
+    update grocery_items
+    set status = @status,
+        matched_at = coalesce(matched_at, @now),
+        approved_at = case when @status = 'approved' then coalesce(approved_at, @now) else approved_at end,
+        error_message = null,
+        updated_at = @now
+    where id = @itemId and status not in ('added_to_cart', 'ordered', 'fulfilled', 'deleted')
+  `
+  ).run(input);
+  raw.prepare(
+    `
+    insert into chosen_products (
+      grocery_item_id, candidate_id, walmart_product_id, url, title, image_url, chosen_by, chosen_at
+    )
+    values (
+      @itemId, @candidateId, @walmartProductId, @url, @title, @imageUrl, @chosenBy, @now
+    )
+    on conflict(grocery_item_id) do update set
+      candidate_id = excluded.candidate_id,
+      walmart_product_id = excluded.walmart_product_id,
+      url = excluded.url,
+      title = excluded.title,
+      image_url = excluded.image_url,
+      chosen_by = excluded.chosen_by,
+      chosen_at = excluded.chosen_at
+  `
+  ).run(input);
 }
 
 function migrateExistingDatabase(raw: Database.Database): void {
