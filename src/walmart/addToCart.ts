@@ -32,6 +32,9 @@ export async function clickAddToCartOnPage(page: AddToCartPage, target: AddToCar
   if (body && detectWalmartManualAction(body)) {
     return { status: "needs_manual_action", message: walmartManualActionMessage("cart_add") };
   }
+  if (body && detectUnavailableProduct(body)) {
+    return { status: "failed", message: "Walmart says this item is unavailable or out of stock." };
+  }
 
   const roleButton = page.getByRole("button", { name: /add|add to cart/i });
   const addButton = roleButton.or(page.locator('button:has-text("Add")')).first();
@@ -68,4 +71,8 @@ async function setRequestedQuantity(
 export function normalizeRequestedQuantity(quantity: number | null): number {
   if (!quantity || !Number.isFinite(quantity)) return 1;
   return Math.max(1, Math.min(12, Math.floor(quantity)));
+}
+
+function detectUnavailableProduct(text: string): boolean {
+  return /out of stock|currently unavailable|item is unavailable|sold out|not available/i.test(text);
 }
