@@ -1,7 +1,9 @@
 import fs from "node:fs";
+import https from "node:https";
 import pino from "pino";
 import { loadConfig, resolveProjectPath } from "./config/config.js";
 import { createDatabase } from "./db/database.js";
+import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "./network/urls.js";
 import { startReminderPoller } from "./reminders/poller.js";
 import { createApp } from "./server/app.js";
 
@@ -15,13 +17,49 @@ const app = createApp({ db, dashboardPin: config.dashboard.pin, config, logger }
 startReminderPoller({ db, config, logger });
 
 app.listen(config.dashboard.port, config.dashboard.host, () => {
+  const lanAddress = pickLanAddress();
+  const urls = buildDashboardUrls({
+    port: config.dashboard.port,
+    lanAddress,
+    bonjourHost: detectBonjourHost("mac-mini.local"),
+    httpsPort: config.dashboard.https.enabled ? config.dashboard.https.port : null
+  });
   logger.info(
     {
       host: config.dashboard.host,
       port: config.dashboard.port,
       dbPath,
-      mode: config.walmart.mode
+      mode: config.walmart.mode,
+      urls
     },
     "walmart-reminders dashboard started"
   );
+  console.log(`Local Mac URL: ${urls.local}`);
+  if (urls.lan) console.log(`iPhone LAN URL: ${urls.lan}`);
+  if (urls.bonjour) console.log(`Bonjour URL: ${urls.bonjour}`);
 });
+
+if (config.dashboard.https.enabled) {
+  const certPath = resolveProjectPath(config.dashboard.https.certPath);
+  const keyPath = resolveProjectPath(config.dashboard.https.keyPath);
+  try {
+    const server = https.createServer(
+      {
+        cert: fs.readFileSync(certPath),
+        key: fs.readFileSync(keyPath)
+      },
+      app
+    );
+    server.listen(config.dashboard.https.port, config.dashboard.host, () => {
+      logger.info(
+        { host: config.dashboard.host, port: config.dashboard.https.port, certPath, keyPath },
+        "walmart-reminders HTTPS dashboard started"
+      );
+    });
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error), certPath, keyPath },
+      "HTTPS dashboard requested but certificate files could not be loaded"
+    );
+  }
+}

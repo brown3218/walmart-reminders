@@ -1,78 +1,185 @@
 # Walmart Reminders
 
-Mac mini resident app that watches an Apple Reminders grocery list, matches items against Walmart previously ordered items, and exposes a phone-friendly local dashboard for approval.
+Local-first Mac mini app that watches Apple Reminders grocery lists, matches items against Walmart reorder/search candidates, and exposes a phone-first dashboard for approving, adding, and cleaning up Walmart shopping items.
 
-## Current MVP Slice
-
-- TypeScript/Express dashboard service.
-- SQLite schema and idempotent reminder ingestion.
-- Grocery text parser and prior-purchase matcher.
-- Playwright persistent Walmart profile helpers.
-- Swift EventKit spike that prints incomplete reminders as JSON lines.
-- LaunchAgent template.
+The runtime is local to the Mac. Codex is only used to build the app. Walmart login uses a persistent local Playwright profile under `var/walmart-profile`; the app never stores your Walmart password and never bypasses CAPTCHA, 2FA, robot checks, press-and-hold challenges, or manual verification.
 
 ## Setup
 
 ```sh
-cd /Users/davidbrown/Walmart
 npm install
 cp config.example.yaml config.yaml
 npm run build
+npm test
+npm run doctor
 npm start
 ```
 
-Open the dashboard from the Mac:
+In another terminal:
 
-```text
-http://localhost:3789
+```sh
+npm run url
 ```
 
-From your phone on the same LAN, use:
+Open the printed iPhone LAN URL from Safari while the iPhone is on the same Wi-Fi.
+
+## iPhone Home Screen
+
+The easy local mode is HTTP:
 
 ```text
+http://<detected-LAN-IP>:3789
 http://mac-mini.local:3789
 ```
 
-The port is required. Opening only `http://mac-mini.local` will not reach the dashboard.
+In Safari on iPhone, open the URL, tap Share, then Add to Home Screen. The dashboard works over HTTP for normal use and bookmarking.
 
-Then add it to the iPhone Home Screen from Safari.
+Service workers require a secure context. For full PWA app-shell caching, enable the optional HTTPS config after creating local certificates:
 
-## Swift Reminders Spike
-
-```sh
-cd apps/reminder-watcher-swift
-swift run reminder-watcher Walmart "Walmart shopping list"
+```yaml
+dashboard:
+  https:
+    enabled: true
+    port: 3790
+    certPath: ./var/certs/cert.pem
+    keyPath: ./var/certs/key.pem
 ```
 
-The first run should prompt for Reminders access. It prints one JSON line per incomplete reminder.
+Then restart and use the HTTPS URL printed by `npm run url`.
 
-## Reminder Sync
+## Apple Reminders
 
-The Node service runs `scripts/read-reminders.applescript` on startup and every `reminders.pollSeconds`.
-Add an incomplete item to the configured Reminders list, then refresh the dashboard. It should appear under **Needs Approval** after one poll.
+Default list names:
 
-## Walmart Session Spike
+- `Walmart`
+- `Walmart shopping`
+- `Walmart shopping list`
 
-The Playwright helpers use a persistent profile under `var/walmart-profile`. The first automation run should open a browser where you manually log in to Walmart. The app reuses that session and never stores your Walmart password.
+The first run may prompt for Reminders permission. Grant access to Terminal, Node, or the launched service when macOS asks. The default cleanup behavior completes reminders rather than deleting them:
 
-Automation stops if Walmart asks for login, CAPTCHA, 2FA, or another manual check.
-If Walmart shows a robot/press-and-hold challenge, use the dashboard's **Open Walmart** button to complete the add in your normal browser/app, then tap **I Added It** so the local process history stays accurate. The app does not bypass Walmart challenges.
+```yaml
+reminders:
+  fulfillAction: complete
+  deleteAction: complete
+  pollSeconds: 60
+```
 
-To set up or repair the session manually:
+If `npm run doctor` reports `No configured Reminders list was found`, create one of the configured lists in Apple Reminders or update `config.yaml`.
+
+## Walmart Session
+
+Open a visible Walmart browser profile:
 
 ```sh
 npm run walmart:login
 ```
 
-Log in to Walmart in the opened browser window, complete any verification, then close the window.
+Log in manually, complete any verification, then close the browser window. The app reuses that local profile for future Walmart reorder/search/add attempts.
+
+Manual verification policy:
+
+- Login, CAPTCHA, 2FA, robot checks, press-and-hold challenges, or security checks stop automation.
+- The dashboard shows `manual action`.
+- Use Open Walmart, finish the action yourself, then tap I Added It or Retry.
+
+## Commands
+
+```sh
+npm run build
+npm test
+npm run doctor
+npm run url
+npm run walmart:login
+npm run walmart:sync
+npm run walmart:orders
+npm start
+```
+
+`npm run doctor` checks Node, config, SQLite, Reminders helper status, Walmart profile directory, dashboard reachability, and LAN URL detection.
 
 ## LaunchAgent
 
-After `npm run build`, copy or symlink:
+Build once, then install the LaunchAgent:
 
 ```sh
+npm run build
 cp launchd/com.local.walmart-reminders.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.local.walmart-reminders.plist
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.walmart-reminders.plist
+launchctl kickstart -k gui/$UID/com.local.walmart-reminders
 ```
 
-Update the `ProgramArguments` path in the plist if `npm` is not at `/usr/local/bin/npm`.
+Logs go to:
+
+```text
+var/logs/launchd.out.log
+var/logs/launchd.err.log
+```
+
+The included plist uses this checkout path as an example. If you move the repo, update `WorkingDirectory`, `ProgramArguments`, `StandardOutPath`, and `StandardErrorPath`.
+
+## Dashboard
+
+The dashboard has compact iPhone-first sections:
+
+- Needs Review
+- Auto Matched / Adding
+- In Cart
+- Unmatched
+- Recent Activity
+
+It stores the dashboard PIN locally in the iPhone browser using `localStorage`. Mutating and read API endpoints require the `x-dashboard-pin` header when a PIN is configured.
+
+## Troubleshooting
+
+### iPhone Cannot Reach App
+
+Run:
+
+```sh
+npm run url
+```
+
+Use the `iPhone LAN` URL. Confirm the Mac and iPhone are on the same Wi-Fi and the server is running with host `0.0.0.0`.
+
+### Reminders Permission Denied
+
+Run `npm run doctor`. If macOS asks for Reminders access, allow it. If no prompt appears, check System Settings, Privacy & Security, Reminders, and grant access to Terminal or the service host.
+
+### Walmart Needs Manual Login
+
+Run:
+
+```sh
+npm run walmart:login
+```
+
+Complete login or verification in the opened browser. Do not try to automate around Walmart challenges.
+
+### CAPTCHA, 2FA, Robot, Or Press-And-Hold
+
+Automation stops and marks the item `manual action`. Use the dashboard's Open Walmart action, complete the step yourself, then tap I Added It or Retry.
+
+### Service Worker Not Available Over HTTP LAN
+
+This is expected. HTTP LAN mode is for easy local access and Home Screen bookmarking. Configure local HTTPS to enable service-worker caching.
+
+## API
+
+Implemented endpoints:
+
+- `GET /api/health`
+- `GET /api/status`
+- `GET /api/items`
+- `GET /api/history`
+- `GET /api/events`
+- `POST /api/sync/reminders`
+- `POST /api/sync/walmart-catalog`
+- `POST /api/sync/orders`
+- `POST /api/items/:id/approve`
+- `POST /api/items/:id/reject`
+- `POST /api/items/:id/delete`
+- `POST /api/items/:id/retry`
+- `POST /api/items/:id/mark-added`
+- `POST /api/items/:id/mark-ordered`
+- `POST /api/items/:id/search`
+- `POST /api/walmart/open-session`

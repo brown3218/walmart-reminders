@@ -15,10 +15,18 @@ describe("dashboard API", () => {
       const health = await fetch(`${baseUrl}/api/health`);
       expect(await health.json()).toMatchObject({ ok: true });
 
-      const approvals = await fetch(`${baseUrl}/api/approvals`, {
+      const status = await fetch(`${baseUrl}/api/status`, {
         headers: { "x-dashboard-pin": "1234" }
       });
-      expect(await approvals.json()).toMatchObject({ items: [] });
+      expect(await status.json()).toMatchObject({
+        server: { ok: true },
+        counts: { needs_review: 0 }
+      });
+
+      const items = await fetch(`${baseUrl}/api/items`, {
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(await items.json()).toMatchObject({ items: [] });
     } finally {
       server.close();
     }
@@ -53,7 +61,7 @@ describe("dashboard API", () => {
       expect(approved.status).toBe(202);
 
       const row = db.raw.prepare("select status from grocery_items where id = ?").get(item.id) as { status: string };
-      expect(row.status).toBe("matched");
+      expect(row.status).toBe("approved");
     } finally {
       server.close();
     }
@@ -89,7 +97,7 @@ describe("dashboard API", () => {
       const body = await response.json();
       expect(body.items[0]).toMatchObject({
         raw_text: "ranch mix",
-        status: "matched",
+        status: "approved",
         chosen_title: "Hidden Valley Ranch Mix",
         chosen_url: "https://www.walmart.com/ip/ranch"
       });
@@ -124,7 +132,51 @@ describe("dashboard API", () => {
       const history = await fetch(`${baseUrl}/api/history`, {
         headers: { "x-dashboard-pin": "1234" }
       }).then((r) => r.json());
-      expect(history.items[0]).toMatchObject({ raw_text: "milk", status: "added" });
+      expect(history.items[0]).toMatchObject({ raw_text: "milk", status: "added_to_cart" });
+    } finally {
+      server.close();
+    }
+  });
+
+  it("supports sync, retry, mark ordered, delete, and search endpoints without live Walmart by reporting configured status", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-endpoints",
+      listId: "walmart-list",
+      title: "deodorant",
+      notes: null,
+      completed: false
+    });
+    const item = db.listItems()[0];
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      for (const path of ["/api/sync/reminders", "/api/sync/walmart-catalog", "/api/sync/orders"]) {
+        const response = await fetch(`${baseUrl}${path}`, { method: "POST", headers: { "x-dashboard-pin": "1234" } });
+        expect([202, 503]).toContain(response.status);
+      }
+
+      const retry = await fetch(`${baseUrl}/api/items/${item.id}/retry`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(retry.status).toBe(202);
+
+      const ordered = await fetch(`${baseUrl}/api/items/${item.id}/mark-ordered`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(ordered.status).toBe(202);
+
+      const deleted = await fetch(`${baseUrl}/api/items/${item.id}/delete`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(deleted.status).toBe(202);
     } finally {
       server.close();
     }

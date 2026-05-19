@@ -3,17 +3,28 @@ reminders:
     - Walmart
     - Walmart shopping
     - Walmart shopping list
-  pollSeconds: 90
+  fulfillAction: complete
+  deleteAction: complete
+  pollSeconds: 60
 
 dashboard:
   host: 0.0.0.0
   port: 3789
   pin: "change-me"
+  https:
+    enabled: false
+    port: 3790
+    certPath: ./var/certs/cert.pem
+    keyPath: ./var/certs/key.pem
 
 walmart:
   profileDir: ./var/walmart-profile
   mode: auto_previous_only
   reorderSyncHours: 12
+  catalogSyncMinutes: 60
+  orderSyncMinutes: 60
+  autoAddThreshold: 0.92
+  proposeThreshold: 0.45
 
 database:
   path: ./var/app.sqlite

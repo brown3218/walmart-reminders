@@ -4,7 +4,10 @@ import path from "node:path";
 import type pino from "pino";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import type { AppDatabase } from "../db/database.js";
-import { addMatchedItemToWalmart } from "../walmart/automation.js";
+import { applyReminderDisposition } from "../reminders/actions.js";
+import { pollRemindersOnce } from "../reminders/poller.js";
+import { enqueueAddMatchedItemToWalmart } from "../walmart/automation.js";
+import { scrapeReorderCandidates } from "../walmart/reorderCatalog.js";
 import { searchWalmartProducts } from "../walmart/search.js";
 
 export type CreateAppOptions = {
@@ -17,11 +20,24 @@ export type CreateAppOptions = {
 export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions): express.Express {
   const app = express();
   app.use(express.json());
-  app.use(express.static(path.resolve(process.cwd(), "public")));
 
   app.get("/api/health", (_req, res) => {
     const session = db.raw.prepare("select * from walmart_session_state where id = 1").get();
-    res.json({ ok: true, walmartSession: session });
+    res.json({ ok: true, walmartSession: session, time: new Date().toISOString() });
+  });
+
+  app.get("/api/status", requirePin(dashboardPin), (_req, res) => {
+    const session = db.raw.prepare("select * from walmart_session_state where id = 1").get();
+    res.json({
+      server: { ok: true, time: new Date().toISOString() },
+      walmartSession: session,
+      syncState: db.listSyncState(),
+      counts: db.countsByStatus()
+    });
+  });
+
+  app.get("/api/items", requirePin(dashboardPin), (_req, res) => {
+    res.json({ items: db.listItems() });
   });
 
   app.get("/api/approvals", requirePin(dashboardPin), (_req, res) => {
@@ -32,27 +48,124 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     res.json({ items: db.listHistory() });
   });
 
+  app.get("/api/events", requirePin(dashboardPin), (req, res) => {
+    res.setHeader("content-type", "text/event-stream");
+    res.setHeader("cache-control", "no-cache");
+    res.setHeader("connection", "keep-alive");
+    const send = () => {
+      res.write("event: status\n");
+      res.write(`data: ${JSON.stringify({ counts: db.countsByStatus(), time: new Date().toISOString() })}\n\n`);
+    };
+    send();
+    const timer = setInterval(send, 5000);
+    req.on("close", () => clearInterval(timer));
+  });
+
   app.post("/api/reminders", requirePin(dashboardPin), (req, res) => {
     db.upsertReminder(req.body);
     res.status(202).json({ ok: true });
   });
 
+  app.post("/api/sync/reminders", requirePin(dashboardPin), async (_req, res) => {
+    if (!config || !logger) {
+      res.status(503).json({ error: "Reminder sync is not configured in this process." });
+      return;
+    }
+    try {
+      db.setSyncState("reminders", "running");
+      const result = await pollRemindersOnce(db, config);
+      db.setSyncState("reminders", "ok");
+      res.status(202).json({ ok: true, result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      db.setSyncState("reminders", "failed", message);
+      logger.warn({ error: message }, "manual reminders sync failed");
+      res.status(503).json({ error: message });
+    }
+  });
+
+  app.post("/api/sync/walmart-catalog", requirePin(dashboardPin), async (_req, res) => {
+    if (!config) {
+      res.status(503).json({ error: "Walmart catalog sync is not configured in this process." });
+      return;
+    }
+    try {
+      db.setSyncState("walmart_catalog", "running");
+      const candidates = await scrapeReorderCandidates(resolveProjectPath(config.walmart.profileDir));
+      db.setSyncState("walmart_catalog", "ok");
+      db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart reorder items.`, false);
+      res.status(202).json({ ok: true, candidates: candidates.length });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      db.setSyncState("walmart_catalog", "manual_action", message);
+      db.updateWalmartSession("needs_manual_action", message, true);
+      res.status(409).json({ error: message });
+    }
+  });
+
+  app.post("/api/sync/orders", requirePin(dashboardPin), (_req, res) => {
+    db.setSyncState("walmart_orders", "manual_available", "Live order scraping requires a verified Walmart session.");
+    res.status(202).json({
+      ok: true,
+      message: "Order reconciliation hooks are installed; use Mark Ordered until live Walmart order scraping is verified."
+    });
+  });
+
   app.post("/api/items/:id/approve", requirePin(dashboardPin), (req, res) => {
-    const candidateId = req.body.candidateId ? Number(req.body.candidateId) : null;
+    const itemId = Number(req.params.id);
     db.approveItem({
-      itemId: Number(req.params.id),
-      candidateId,
+      itemId,
+      candidateId: req.body.candidateId ? Number(req.body.candidateId) : null,
+      walmartProductId: req.body.walmartProductId ?? null,
       url: req.body.url ?? "manual-review",
       title: req.body.title ?? "Approved item",
+      imageUrl: req.body.imageUrl ?? null,
       chosenBy: "dashboard"
     });
     if (config && logger) {
-      void addMatchedItemToWalmart(db, config, logger, Number(req.params.id));
+      enqueueAddMatchedItemToWalmart(db, config, logger, itemId);
     }
     res.status(202).json({ ok: true });
   });
 
-  app.post("/api/items/:id/search", requirePin(dashboardPin), async (req, res, next) => {
+  app.post("/api/items/:id/reject", requirePin(dashboardPin), (req, res) => {
+    db.rejectItem(Number(req.params.id));
+    res.status(202).json({ ok: true });
+  });
+
+  app.post("/api/items/:id/delete", requirePin(dashboardPin), (req, res) => {
+    const deletion = db.deleteItem(Number(req.params.id), "dashboard");
+    if (config && logger) {
+      void applyReminderDisposition(config, logger, { externalId: deletion.externalId, reason: "delete" });
+    }
+    res.status(202).json({ ok: true, reminder: deletion });
+  });
+
+  app.post("/api/items/:id/retry", requirePin(dashboardPin), (req, res) => {
+    const itemId = Number(req.params.id);
+    db.resetItemForRetry(itemId);
+    if (config && logger && db.getChosenProduct(itemId)) {
+      enqueueAddMatchedItemToWalmart(db, config, logger, itemId);
+    }
+    res.status(202).json({ ok: true });
+  });
+
+  app.post("/api/items/:id/mark-added", requirePin(dashboardPin), (req, res) => {
+    db.markItemAdded(Number(req.params.id), "Marked added manually from dashboard.");
+    res.status(202).json({ ok: true });
+  });
+
+  app.post("/api/items/:id/mark-ordered", requirePin(dashboardPin), (req, res) => {
+    const itemId = Number(req.params.id);
+    db.markItemOrdered(itemId, "Marked ordered manually from dashboard.");
+    const deletion = db.fulfillItem(itemId, "dashboard");
+    if (deletion && config && logger) {
+      void applyReminderDisposition(config, logger, { externalId: deletion.externalId, reason: "fulfill" });
+    }
+    res.status(202).json({ ok: true });
+  });
+
+  app.post("/api/items/:id/search", requirePin(dashboardPin), async (req, res) => {
     if (!config) {
       res.status(503).json({ error: "Walmart search is not configured." });
       return;
@@ -71,14 +184,14 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
       res.status(202).json({ ok: true, candidates: candidates.length });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      db.markItemFailed(Number(req.params.id), message);
-      db.updateWalmartSession("needs_manual_login", message, true);
+      db.markItemManualAction(Number(req.params.id), message);
+      db.updateWalmartSession("needs_manual_action", message, true);
       res.status(409).json({ error: message });
     }
   });
 
   app.post("/api/walmart/open-session", requirePin(dashboardPin), (_req, res) => {
-    const child = spawn("/usr/local/bin/npm", ["run", "walmart:login"], {
+    const child = spawn("npm", ["run", "walmart:login"], {
       cwd: process.cwd(),
       detached: true,
       stdio: "ignore",
@@ -89,18 +202,10 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     res.status(202).json({ ok: true });
   });
 
+  app.use(express.static(path.resolve(process.cwd(), "public")));
+
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(500).json({ error: error.message });
-  });
-
-  app.post("/api/items/:id/reject", requirePin(dashboardPin), (req, res) => {
-    db.rejectItem(Number(req.params.id));
-    res.status(202).json({ ok: true });
-  });
-
-  app.post("/api/items/:id/mark-added", requirePin(dashboardPin), (req, res) => {
-    db.markItemAdded(Number(req.params.id), "Marked added manually from dashboard.");
-    res.status(202).json({ ok: true });
   });
 
   return app;

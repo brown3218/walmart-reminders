@@ -7,7 +7,11 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/src/index.js",
     "build": "tsc -p tsconfig.json",
+    "url": "tsx scripts/print-url.ts",
+    "doctor": "tsx scripts/doctor.ts",
     "walmart:login": "tsx scripts/open-walmart-session.ts",
+    "walmart:sync": "tsx scripts/sync-walmart-catalog.ts",
+    "walmart:orders": "tsx scripts/sync-walmart-orders.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

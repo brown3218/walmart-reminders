@@ -3,6 +3,19 @@ import type { AppDatabase } from "../db/database.js";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import { addApprovedItemToCart } from "./addToCart.js";
 
+let queue = Promise.resolve();
+
+export function enqueueAddMatchedItemToWalmart(
+  db: AppDatabase,
+  config: AppConfig,
+  logger: pino.Logger,
+  itemId: number
+): void {
+  queue = queue
+    .catch(() => undefined)
+    .then(() => addMatchedItemToWalmart(db, config, logger, itemId));
+}
+
 export async function addMatchedItemToWalmart(
   db: AppDatabase,
   config: AppConfig,
@@ -21,6 +34,8 @@ export async function addMatchedItemToWalmart(
     const result = await addApprovedItemToCart(resolveProjectPath(config.walmart.profileDir), url);
     if (result.status === "added") {
       db.markItemAdded(itemId, result.message);
+    } else if (result.status === "needs_manual_action") {
+      db.markItemManualAction(itemId, result.message);
     } else {
       db.markItemFailed(itemId, result.message);
     }

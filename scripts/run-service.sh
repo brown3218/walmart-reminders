@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
-cd /Users/davidbrown/Walmart
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_DIR="${WALMART_REMINDERS_HOME:-$(dirname "$SCRIPT_DIR")}"
+
+cd "$PROJECT_DIR"
 mkdir -p var/logs var/walmart-profile
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 

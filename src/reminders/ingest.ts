@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AppDatabase } from "../db/database.js";
+import type { AppDatabase, ReminderInput } from "../db/database.js";
 
 const reminderSnapshotSchema = z.object({
   externalId: z.string(),
@@ -46,6 +46,32 @@ export function ingestReminderJsonLines(db: AppDatabase, stdout: string): Remind
 }
 
 export function ingestReminderTsvLines(db: AppDatabase, stdout: string): ReminderIngestResult {
+  const reminders = parseReminderTsvLines(stdout);
+  for (const reminder of reminders) db.upsertReminder(reminder);
+  const nonEmptyLines = stdout.split(/\r?\n/).filter((line) => line.trim()).length;
+  return { ingested: reminders.length, skipped: nonEmptyLines - reminders.length };
+}
+
+export function parseReminderTsvLines(stdout: string): ReminderInput[] {
+  const reminders: ReminderInput[] = [];
+
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const [externalId, listId, title, notes = "", completed = "false"] = line.split("\t");
+    if (!externalId || !listId || !title) continue;
+    reminders.push({
+      externalId,
+      listId,
+      title,
+      notes: notes || null,
+      completed: completed === "true"
+    });
+  }
+
+  return reminders;
+}
+
+export function ingestReminderTsvLinesLegacy(db: AppDatabase, stdout: string): ReminderIngestResult {
   let ingested = 0;
   let skipped = 0;
 

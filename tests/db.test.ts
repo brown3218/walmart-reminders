@@ -52,7 +52,7 @@ describe("database reminder ingestion", () => {
 
     expect(db.listApprovals()).toHaveLength(0);
     const row = db.raw.prepare("select status from grocery_items where id = ?").get(item.id) as { status: string };
-    expect(row.status).toBe("matched");
+    expect(row.status).toBe("approved");
   });
 
   it("stores Walmart candidates and approves a specific candidate", () => {

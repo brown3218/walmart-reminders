@@ -6,3 +6,4 @@ config.yaml
 .swiftpm/
 .build/
 **/.build/
+CodexDash/

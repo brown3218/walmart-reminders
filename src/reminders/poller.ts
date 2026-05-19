@@ -3,7 +3,8 @@ import { promisify } from "node:util";
 import type pino from "pino";
 import type { AppConfig } from "../config/config.js";
 import type { AppDatabase } from "../db/database.js";
-import { ingestReminderTsvLines } from "./ingest.js";
+import { parseReminderTsvLines } from "./ingest.js";
+import { applyReminderSnapshot } from "./snapshot.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -33,5 +34,8 @@ export async function pollRemindersOnce(db: AppDatabase, config: AppConfig): Pro
     timeout: 30000,
     maxBuffer: 1024 * 1024
   });
-  return ingestReminderTsvLines(db, stdout);
+  const reminders = parseReminderTsvLines(stdout);
+  const nonEmptyLines = stdout.split(/\r?\n/).filter((line) => line.trim()).length;
+  applyReminderSnapshot(db, reminders);
+  return { ingested: reminders.length, skipped: nonEmptyLines - reminders.length };
 }
