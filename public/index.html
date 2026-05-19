@@ -391,6 +391,9 @@
           <button class="action" id="searchAlternatives">Search</button>
           <button class="action" id="openCandidate">Open Walmart</button>
           <button class="action" id="markAdded">I Added It</button>
+          <button class="action" id="retryItem">Retry</button>
+          <button class="action" id="markOrdered">Mark Ordered</button>
+          <button class="action danger" id="deleteItem">Delete</button>
           <button class="action" id="closeModal">Close</button>
         </div>
       </div>
@@ -416,6 +419,9 @@
       document.querySelector("#searchAlternatives").addEventListener("click", () => search(currentItem));
       document.querySelector("#openCandidate").addEventListener("click", () => window.open(walmartUrl(currentItem), "_blank", "noreferrer"));
       document.querySelector("#markAdded").addEventListener("click", () => markAdded(currentItem));
+      document.querySelector("#retryItem").addEventListener("click", () => retryItem(currentItem));
+      document.querySelector("#markOrdered").addEventListener("click", () => markOrdered(currentItem));
+      document.querySelector("#deleteItem").addEventListener("click", () => deleteItem(currentItem));
       document.querySelector("#closeModal").addEventListener("click", () => dialog.close());
 
       async function request(path, options = {}) {
@@ -515,7 +521,9 @@
       };
 
       async function syncNow() {
-        await request("/api/sync/reminders", { method: "POST" }).catch(() => null);
+        for (const path of ["/api/sync/reminders", "/api/sync/walmart-catalog", "/api/sync/orders"]) {
+          await request(path, { method: "POST" }).catch(() => null);
+        }
         await load();
       }
 
@@ -552,6 +560,27 @@
       async function markAdded(item) {
         if (!item) return;
         await request(`/api/items/${item.id}/mark-added`, { method: "POST" });
+        dialog.close();
+        await load();
+      }
+
+      async function retryItem(item) {
+        if (!item) return;
+        await request(`/api/items/${item.id}/retry`, { method: "POST" });
+        dialog.close();
+        await load();
+      }
+
+      async function markOrdered(item) {
+        if (!item) return;
+        await request(`/api/items/${item.id}/mark-ordered`, { method: "POST" });
+        dialog.close();
+        await load();
+      }
+
+      async function deleteItem(item) {
+        if (!item || !window.confirm(`Remove ${item.raw_text || "this item"}?`)) return;
+        await request(`/api/items/${item.id}/delete`, { method: "POST" });
         dialog.close();
         await load();
       }
