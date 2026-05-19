@@ -6,12 +6,17 @@ type SyncJob = () => Promise<void>;
 export function startWalmartSyncJobs(input: {
   config: AppConfig;
   logger: pino.Logger;
+  shouldRun?: () => boolean;
   runCatalog: SyncJob;
   runOrders: SyncJob;
 }): NodeJS.Timeout[] {
   const handles: NodeJS.Timeout[] = [];
   let queue = Promise.resolve();
   const enqueue = (name: string, run: SyncJob) => {
+    if (input.shouldRun && !input.shouldRun()) {
+      input.logger.warn(`${name} paused while Walmart manual action is pending`);
+      return;
+    }
     queue = queue
       .catch(() => undefined)
       .then(run)

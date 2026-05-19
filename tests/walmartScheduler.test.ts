@@ -72,4 +72,35 @@ describe("Walmart sync scheduler", () => {
 
     for (const handle of handles) clearInterval(handle);
   });
+
+  it("skips scheduled sync jobs while Walmart needs manual action", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    let manualActionPending = true;
+    const handles = startWalmartSyncJobs({
+      config: {
+        walmart: {
+          catalogSyncMinutes: 10,
+          orderSyncMinutes: 20
+        }
+      } as never,
+      logger: { warn: () => undefined, info: () => undefined } as never,
+      shouldRun: () => !manualActionPending,
+      runCatalog: async () => {
+        calls.push("catalog");
+      },
+      runOrders: async () => {
+        calls.push("orders");
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toEqual([]);
+
+    manualActionPending = false;
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(calls).toEqual(["catalog"]);
+
+    for (const handle of handles) clearInterval(handle);
+  });
 });

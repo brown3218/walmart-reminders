@@ -8,6 +8,7 @@ import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "./network
 import { startReminderPoller } from "./reminders/poller.js";
 import { createApp } from "./server/app.js";
 import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } from "./walmart/automation.js";
+import { isWalmartManualActionPending } from "./walmart/manualActionGate.js";
 import { startWalmartSyncJobs } from "./walmart/scheduler.js";
 import { runWalmartCatalogSync, runWalmartOrderSync } from "./walmart/sync.js";
 
@@ -36,6 +37,7 @@ startReminderPoller({
 startWalmartSyncJobs({
   config,
   logger,
+  shouldRun: () => !isWalmartManualActionPending(db),
   runCatalog: async () => {
     const result = await runWalmartCatalogSync({ db, config, logger });
     logger.info(result, "walmart catalog sync complete");

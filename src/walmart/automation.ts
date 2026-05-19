@@ -6,6 +6,7 @@ import { createSerialAutomationQueue } from "./automationQueue.js";
 import { runExclusiveWalmartProfileTask } from "./profileQueue.js";
 import { removeApprovedItemFromCart } from "./removeFromCart.js";
 import { isWalmartProductUrl } from "./urls.js";
+import { isWalmartManualActionPending, walmartManualActionPendingMessage } from "./manualActionGate.js";
 
 const walmartAutomationQueue = createSerialAutomationQueue();
 export type CartRemovalTarget = { title: string; url: string | null };
@@ -39,6 +40,11 @@ export async function addMatchedItemToWalmart(
     runExclusive?: <T>(task: () => Promise<T>) => Promise<T>;
   } = {}
 ): Promise<void> {
+  if (isWalmartManualActionPending(db)) {
+    db.markItemManualAction(itemId, walmartManualActionPendingMessage);
+    return;
+  }
+
   const chosen = db.getChosenProduct(itemId);
   const url = String(chosen?.url ?? "");
   if (!isWalmartProductUrl(url)) {
