@@ -38,6 +38,10 @@ startWalmartSyncJobs({
   config,
   logger,
   shouldRun: () => !isWalmartManualActionPending(db),
+  onSkipped: (name) => {
+    const action = name === "walmart catalog sync" ? "catalog_sync" : "order_check";
+    db.recordAutomationRun(action, "manual_action", "Paused while Walmart manual action is pending.");
+  },
   runCatalog: async () => {
     const result = await runWalmartCatalogSync({ db, config, logger });
     logger.info(result, "walmart catalog sync complete");

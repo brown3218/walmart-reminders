@@ -2,21 +2,31 @@ import type pino from "pino";
 import type { AppConfig } from "../config/config.js";
 
 type SyncJob = () => Promise<void>;
+export type WalmartSyncJobName = "walmart catalog sync" | "walmart order sync";
 
 export function startWalmartSyncJobs(input: {
   config: AppConfig;
   logger: pino.Logger;
   shouldRun?: () => boolean;
+  onSkipped?: (name: WalmartSyncJobName) => void | Promise<void>;
   runCatalog: SyncJob;
   runOrders: SyncJob;
 }): NodeJS.Timeout[] {
   const handles: NodeJS.Timeout[] = [];
+  const skippedNotified = new Set<WalmartSyncJobName>();
   let queue = Promise.resolve();
-  const enqueue = (name: string, run: SyncJob) => {
+  const enqueue = (name: WalmartSyncJobName, run: SyncJob) => {
     if (input.shouldRun && !input.shouldRun()) {
       input.logger.warn(`${name} paused while Walmart manual action is pending`);
+      if (!skippedNotified.has(name)) {
+        skippedNotified.add(name);
+        Promise.resolve(input.onSkipped?.(name)).catch((error) => {
+          input.logger.warn({ error: error instanceof Error ? error.message : String(error) }, `${name} skip notification failed`);
+        });
+      }
       return;
     }
+    skippedNotified.delete(name);
     queue = queue
       .catch(() => undefined)
       .then(run)
@@ -44,11 +54,11 @@ export function startWalmartSyncJobs(input: {
 }
 
 function startJob(input: {
-  name: string;
+  name: WalmartSyncJobName;
   intervalMs: number;
   run: SyncJob;
   handles: NodeJS.Timeout[];
-  enqueue: (name: string, run: SyncJob) => void;
+  enqueue: (name: WalmartSyncJobName, run: SyncJob) => void;
 }): void {
   const execute = () => {
     input.enqueue(input.name, input.run);
