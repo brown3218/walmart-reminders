@@ -17,7 +17,9 @@ describe("dashboard markup", () => {
     expect(dashboardHtml).toContain('"/api/sync/orders"');
   });
 
-  it("shows Walmart order sync status in the header tiles", () => {
+  it("shows Walmart cart and order status in the header tiles", () => {
+    expect(dashboardHtml).toContain('id="cartStatus"');
+    expect(dashboardHtml).toContain('cartLabel(status.counts)');
     expect(dashboardHtml).toContain('id="ordersStatus"');
     expect(dashboardHtml).toContain('syncLabel(syncRows, "walmart_orders")');
   });

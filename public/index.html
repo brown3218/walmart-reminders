@@ -303,7 +303,7 @@
           padding-inline: 18px;
         }
         .status-grid {
-          grid-template-columns: repeat(5, minmax(0, 1fr));
+          grid-template-columns: repeat(6, minmax(0, 1fr));
         }
         .list.two-col {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -336,6 +336,7 @@
         <div class="status-tile"><div class="status-label">Walmart</div><div class="status-value" id="walmartStatus">Unknown</div></div>
         <div class="status-tile"><div class="status-label">Reminders</div><div class="status-value" id="remindersStatus">Not synced</div></div>
         <div class="status-tile"><div class="status-label">Catalog</div><div class="status-value" id="catalogStatus">Not synced</div></div>
+        <div class="status-tile"><div class="status-label">Cart</div><div class="status-value" id="cartStatus">0 added</div></div>
         <div class="status-tile"><div class="status-label">Orders</div><div class="status-value" id="ordersStatus">Not synced</div></div>
       </div>
 
@@ -461,8 +462,18 @@
         document.querySelector("#sessionMessage").textContent = status.walmartSession?.error_message || "The app reuses the local Walmart browser profile and stops for manual verification.";
         document.querySelector("#remindersStatus").textContent = syncLabel(syncRows, "reminders");
         document.querySelector("#catalogStatus").textContent = syncLabel(syncRows, "walmart_catalog");
+        document.querySelector("#cartStatus").textContent = cartLabel(status.counts);
         document.querySelector("#ordersStatus").textContent = syncLabel(syncRows, "walmart_orders");
         document.querySelector("#syncSummary").textContent = `Needs review ${status.counts?.needs_review || 0} · In cart ${status.counts?.added_to_cart || 0} · Orders ${syncLabel(syncRows, "walmart_orders")}`;
+      }
+
+      function cartLabel(counts) {
+        const added = counts?.added_to_cart || 0;
+        const adding = counts?.adding || 0;
+        const manual = counts?.manual_action || 0;
+        if (manual) return `${manual} manual`;
+        if (adding) return `${adding} adding`;
+        return `${added} added`;
       }
 
       function syncLabel(rows, key) {
