@@ -446,6 +446,7 @@ export function createDatabase(path: string): AppDatabase {
 	          select
 	            gi.id as itemId,
 	            gi.status,
+	            cp.walmart_product_id as productId,
 	            cp.url as productUrl,
 	            coalesce(cp.title, gi.raw_text) as productTitle
 	          from grocery_items gi
@@ -454,7 +455,7 @@ export function createDatabase(path: string): AppDatabase {
 	            and gi.status in ('approved', 'adding', 'added_to_cart', 'manual_action', 'ordered')
 	        `
 	        )
-	        .all() as Array<{ itemId: number; status: string; productUrl: string | null; productTitle: string }>;
+	        .all() as Array<{ itemId: number; status: string; productId: string | null; productUrl: string | null; productTitle: string }>;
 	      const orderRows = raw
 	        .prepare("select id, order_id as orderId, placed_at as placedAt from walmart_orders order by coalesce(placed_at, last_seen_at) desc")
 	        .all() as Array<{ id: number; orderId: string; placedAt: string | null }>;

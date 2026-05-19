@@ -29,4 +29,27 @@ describe("order reconciliation", () => {
 
     expect(fulfilled).toEqual([{ itemId: 7, orderId: "o1", reason: "product_url" }]);
   });
+
+  it("matches recently ordered items by Walmart product ID when URLs differ", () => {
+    const fulfilled = findFulfilledItems(
+      [
+        {
+          itemId: 9,
+          status: "added_to_cart",
+          productId: "123",
+          productUrl: "https://www.walmart.com/ip/eggs/123?selectedSellerId=0",
+          productTitle: "Eggs"
+        }
+      ],
+      [
+        {
+          orderId: "o2",
+          placedAt: "2026-05-19T10:00:00.000Z",
+          items: [{ productId: "123", title: "Great Value Eggs", url: "https://www.walmart.com/ip/some-other-slug/123" }]
+        }
+      ]
+    );
+
+    expect(fulfilled).toEqual([{ itemId: 9, orderId: "o2", reason: "product_id" }]);
+  });
 });

@@ -3,6 +3,7 @@ import { normalizeText } from "../parser/groceryParser.js";
 export type ReconcileItem = {
   itemId: number;
   status: string;
+  productId?: string | null;
   productUrl: string | null;
   productTitle: string;
 };
@@ -20,7 +21,7 @@ export type WalmartOrderSnapshot = {
 export type FulfilledMatch = {
   itemId: number;
   orderId: string;
-  reason: "product_url" | "title_similarity";
+  reason: "product_id" | "product_url" | "title_similarity";
 };
 
 export function findFulfilledItems(items: ReconcileItem[], orders: WalmartOrderSnapshot[]): FulfilledMatch[] {
@@ -40,6 +41,7 @@ export function findFulfilledItems(items: ReconcileItem[], orders: WalmartOrderS
 function findOrderMatchReason(item: ReconcileItem, order: WalmartOrderSnapshot): FulfilledMatch["reason"] | null {
   const itemUrl = canonicalProductUrl(item.productUrl);
   for (const orderItem of order.items) {
+    if (item.productId && orderItem.productId && item.productId === orderItem.productId) return "product_id";
     if (itemUrl && canonicalProductUrl(orderItem.url ?? null) === itemUrl) return "product_url";
     if (titleSimilarity(item.productTitle, orderItem.title) >= 0.72) return "title_similarity";
   }
