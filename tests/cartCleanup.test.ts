@@ -135,4 +135,27 @@ describe("cart cleanup on deletion", () => {
     expect(removedTarget).toEqual({ title: "Usual Milk", url: "https://www.walmart.com/ip/milk/123" });
     expect(db.listItems()[0]).toMatchObject({ raw_text: "eggs", cart_status: "removed" });
   });
+
+  it("marks the Walmart session for manual action when cart removal hits verification", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({ externalId: "r6", listId: "walmart", title: "milk", notes: null, completed: false });
+    const item = db.listItems()[0];
+    db.approveItem({
+      itemId: Number(item.id),
+      url: "https://www.walmart.com/ip/milk/123",
+      title: "Usual Milk",
+      chosenBy: "dashboard"
+    });
+
+    await removeMatchedItemFromWalmart(db, config, logger, Number(item.id), {
+      runExclusive: async (task) => task(),
+      removeFromCart: async () => ({ status: "needs_manual_action", message: "Walmart verification required." })
+    });
+
+    expect(db.raw.prepare("select status, error_message, needs_manual_action from walmart_session_state where id = 1").get()).toEqual({
+      status: "needs_manual_action",
+      error_message: "Walmart verification required.",
+      needs_manual_action: 1
+    });
+  });
 });

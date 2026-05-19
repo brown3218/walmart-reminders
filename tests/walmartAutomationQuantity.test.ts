@@ -68,4 +68,33 @@ describe("Walmart cart automation quantities", () => {
       cart_status: "manual_action"
     });
   });
+
+  it("marks the Walmart session for manual action when cart add hits verification", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({ externalId: "r1", listId: "walmart", title: "milk", notes: null, completed: false });
+    const item = db.listItems()[0];
+    db.approveItem({
+      itemId: Number(item.id),
+      url: "https://www.walmart.com/ip/milk/123",
+      title: "Usual Milk",
+      chosenBy: "dashboard"
+    });
+
+    await addMatchedItemToWalmart(
+      db,
+      { walmart: { profileDir: "./var/walmart-profile" } } as AppConfig,
+      { warn: () => undefined } as never,
+      Number(item.id),
+      {
+        addToCart: async () => ({ status: "needs_manual_action", message: "Walmart verification required." }),
+        runExclusive: (task) => task()
+      }
+    );
+
+    expect(db.raw.prepare("select status, error_message, needs_manual_action from walmart_session_state where id = 1").get()).toEqual({
+      status: "needs_manual_action",
+      error_message: "Walmart verification required.",
+      needs_manual_action: 1
+    });
+  });
 });

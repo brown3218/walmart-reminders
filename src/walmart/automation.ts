@@ -65,6 +65,7 @@ export async function addMatchedItemToWalmart(
       db.markItemAdded(itemId, result.message);
     } else if (result.status === "needs_manual_action") {
       db.markItemManualAction(itemId, result.message);
+      db.updateWalmartSession("needs_manual_action", result.message, true);
     } else {
       db.markItemFailed(itemId, result.message);
     }
@@ -103,6 +104,7 @@ export async function removeMatchedItemFromWalmart(
       db.markItemCartRemoved(itemId, result.message);
     } else {
       db.markItemCartRemovalManual(itemId, result.message);
+      db.updateWalmartSession("needs_manual_action", result.message, true);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
