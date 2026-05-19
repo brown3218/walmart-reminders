@@ -39,6 +39,13 @@ describe("dashboard markup", () => {
     expect(dashboardHtml).toContain('"/api/sync/orders"');
   });
 
+  it("subscribes to server-sent dashboard events with a polling fallback", () => {
+    expect(dashboardHtml).toContain("new EventSource(`/api/events?pin=${encodeURIComponent(pinInput.value)}`)");
+    expect(dashboardHtml).toContain('events.addEventListener("status"');
+    expect(dashboardHtml).toContain("events.onerror = () =>");
+    expect(dashboardHtml).toContain("setInterval(load, 6000)");
+  });
+
   it("shows Walmart cart and order status in the header tiles", () => {
     expect(dashboardHtml).toContain('id="cartStatus"');
     expect(dashboardHtml).toContain('cartLabel(status.counts)');

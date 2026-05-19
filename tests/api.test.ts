@@ -33,6 +33,27 @@ describe("dashboard API", () => {
     }
   });
 
+  it("allows EventSource clients to authenticate events with a PIN query parameter", async () => {
+    const db = createDatabase(":memory:");
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const locked = await fetch(`${baseUrl}/api/events`);
+      expect(locked.status).toBe(401);
+
+      const response = await fetch(`${baseUrl}/api/events?pin=1234`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("text/event-stream");
+      await response.body?.cancel();
+    } finally {
+      server.close();
+    }
+  });
+
   it("supports one-tap approval and rejection", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({

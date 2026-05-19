@@ -407,13 +407,19 @@
       const dialog = document.querySelector("#proposalDialog");
       let currentItem = null;
       let items = [];
+      let events = null;
+      let pollingTimer = null;
 
       pinInput.value = localStorage.getItem("dashboardPin") || "";
       savePin.addEventListener("click", () => {
         localStorage.setItem("dashboardPin", pinInput.value);
+        connectEvents();
         load();
       });
-      pinInput.addEventListener("change", () => localStorage.setItem("dashboardPin", pinInput.value));
+      pinInput.addEventListener("change", () => {
+        localStorage.setItem("dashboardPin", pinInput.value);
+        connectEvents();
+      });
       document.querySelector("#refreshButton").addEventListener("click", syncNow);
       document.querySelector("#openWalmart").addEventListener("click", () => request("/api/walmart/open-session", { method: "POST" }).then(load));
       document.querySelector("#approveCandidate").addEventListener("click", () => approve(currentItem));
@@ -447,6 +453,27 @@
         items = itemBody.items || [];
         renderStatus(status);
         renderSections(items, history.items || []);
+      }
+
+      function connectEvents() {
+        if (!("EventSource" in window)) {
+          startPollingFallback();
+          return;
+        }
+        if (events) events.close();
+        events = new EventSource(`/api/events?pin=${encodeURIComponent(pinInput.value)}`);
+        events.addEventListener("status", () => {
+          load();
+        });
+        events.onerror = () => {
+          if (events) events.close();
+          events = null;
+          startPollingFallback();
+        };
+      }
+
+      function startPollingFallback() {
+        if (!pollingTimer) pollingTimer = setInterval(load, 6000);
       }
 
       function renderLocked() {
@@ -661,7 +688,7 @@
         navigator.serviceWorker.register("/sw.js").catch(() => {});
       }
       load();
-      setInterval(load, 6000);
+      connectEvents();
     </script>
   </body>
 </html>

@@ -50,7 +50,7 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     res.json({ items: db.listHistory() });
   });
 
-  app.get("/api/events", requirePin(dashboardPin), (req, res) => {
+  app.get("/api/events", requirePin(dashboardPin, { allowQueryPin: true }), (req, res) => {
     res.setHeader("content-type", "text/event-stream");
     res.setHeader("cache-control", "no-cache");
     res.setHeader("connection", "keep-alive");
@@ -266,10 +266,11 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
   return app;
 }
 
-function requirePin(pin: string | null): express.RequestHandler {
+function requirePin(pin: string | null, options: { allowQueryPin?: boolean } = {}): express.RequestHandler {
   return (req, res, next) => {
     if (!pin) return next();
     if (req.header("x-dashboard-pin") === pin) return next();
+    if (options.allowQueryPin && typeof req.query.pin === "string" && req.query.pin === pin) return next();
     res.status(401).json({ error: "dashboard PIN required" });
   };
 }
