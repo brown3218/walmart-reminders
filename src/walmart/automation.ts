@@ -1,7 +1,7 @@
 import type pino from "pino";
 import type { AppDatabase } from "../db/database.js";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
-import { addApprovedItemToCart } from "./addToCart.js";
+import { addApprovedItemToCart, type AddToCartResult, type AddToCartTarget } from "./addToCart.js";
 import { runExclusiveWalmartProfileTask } from "./profileQueue.js";
 import { removeApprovedItemFromCart } from "./removeFromCart.js";
 import { isWalmartProductUrl } from "./urls.js";
@@ -35,7 +35,11 @@ export async function addMatchedItemToWalmart(
   db: AppDatabase,
   config: AppConfig,
   logger: pino.Logger,
-  itemId: number
+  itemId: number,
+  options: {
+    addToCart?: (profileDir: string, target: AddToCartTarget) => Promise<AddToCartResult>;
+    runExclusive?: <T>(task: () => Promise<T>) => Promise<T>;
+  } = {}
 ): Promise<void> {
   const chosen = db.getChosenProduct(itemId);
   const url = String(chosen?.url ?? "");
@@ -46,7 +50,13 @@ export async function addMatchedItemToWalmart(
 
   db.markItemAdding(itemId);
   try {
-    const result = await runExclusiveWalmartProfileTask(() => addApprovedItemToCart(resolveProjectPath(config.walmart.profileDir), url));
+    const addToCart = options.addToCart ?? addApprovedItemToCart;
+    const runExclusive = options.runExclusive ?? runExclusiveWalmartProfileTask;
+    const target = {
+      productUrl: url,
+      quantity: numericQuantity(chosen?.quantity_value)
+    };
+    const result = await runExclusive(() => addToCart(resolveProjectPath(config.walmart.profileDir), target));
     if (result.status === "added") {
       db.markItemAdded(itemId, result.message);
     } else if (result.status === "needs_manual_action") {
@@ -59,6 +69,10 @@ export async function addMatchedItemToWalmart(
     logger.warn({ itemId, error: message }, "walmart add failed");
     db.markItemFailed(itemId, message);
   }
+}
+
+function numericQuantity(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 async function removeMatchedItemFromWalmart(
