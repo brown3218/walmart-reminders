@@ -46,7 +46,7 @@ export async function runWalmartCatalogSync(input: {
     });
     enqueueAutoMatchedItems(input.db, enqueueAdd);
     input.db.setSyncState("walmart_catalog", "ok");
-    input.db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart reorder items.`, false);
+    input.db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart catalog items.`, false);
     return { candidates: candidates.length, matches };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

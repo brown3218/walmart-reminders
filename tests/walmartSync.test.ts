@@ -46,6 +46,10 @@ describe("Walmart sync services", () => {
     });
 
     expect(result).toMatchObject({ candidates: 1, matches: { needsReview: 1 } });
+    expect(db.raw.prepare("select status, error_message from walmart_session_state where id = 1").get()).toEqual({
+      status: "ready",
+      error_message: "Captured 1 Walmart catalog items."
+    });
     expect(db.listItems()[0]).toMatchObject({
       raw_text: "ranch mix",
       status: "needs_review",
