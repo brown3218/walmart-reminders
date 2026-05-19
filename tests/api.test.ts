@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDatabase } from "../src/db/database.js";
 import { createApp } from "../src/server/app.js";
+import type { AppConfig } from "../src/config/config.js";
 
 describe("dashboard API", () => {
   it("exposes health and approval queue", async () => {
@@ -212,6 +213,40 @@ describe("dashboard API", () => {
         headers: { "x-dashboard-pin": "1234" }
       });
       expect(deleted.status).toBe(202);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("reports the configured reminder cleanup action when deleting from the dashboard", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-delete-action",
+      listId: "walmart-list",
+      title: "yogurt",
+      notes: null,
+      completed: false
+    });
+    const item = db.listItems()[0];
+    const app = createApp({
+      db,
+      dashboardPin: "1234",
+      config: { reminders: { deleteAction: "delete", fulfillAction: "complete" } } as AppConfig
+    });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/items/${item.id}/delete`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toMatchObject({
+        reminder: { externalId: "reminder-delete-action", action: "delete" }
+      });
     } finally {
       server.close();
     }

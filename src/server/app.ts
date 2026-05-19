@@ -150,13 +150,17 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
 
   app.post("/api/items/:id/delete", requirePin(dashboardPin), (req, res) => {
     const deletion = db.deleteItem(Number(req.params.id), "dashboard");
+    const reminder = {
+      ...deletion,
+      action: config?.reminders.deleteAction ?? deletion.action
+    };
     if (deletion.needsCartRemoval && config && logger) {
       enqueueRemoveMatchedItemFromWalmart(db, config, logger, deletion.itemId);
     }
     if (config && logger) {
       void applyReminderDisposition(config, logger, { externalId: deletion.externalId, reason: "delete" });
     }
-    res.status(202).json({ ok: true, reminder: deletion });
+    res.status(202).json({ ok: true, reminder });
   });
 
   app.post("/api/items/:id/retry", requirePin(dashboardPin), (req, res) => {
