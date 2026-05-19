@@ -12,7 +12,9 @@ if [ ! -f config.yaml ]; then
   cp config.example.yaml config.yaml
 fi
 
-NPM_BIN="${NPM_BIN:-/usr/local/bin/npm}"
+if [ -z "${NPM_BIN:-}" ]; then
+  NPM_BIN="$(command -v npm)"
+fi
 
 "$NPM_BIN" run build
 (cd apps/reminder-watcher-swift && swift build)
