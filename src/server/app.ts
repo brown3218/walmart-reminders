@@ -137,7 +137,24 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
           | { walmart_product_id: string | null; title: string; url: string; image_url: string | null }
           | undefined)
       : undefined;
-    const url = req.body.url ?? candidate?.url ?? "";
+    if (candidateId && !candidate) {
+      res.status(404).json({ error: "Stored Walmart candidate not found for this item." });
+      return;
+    }
+    const approvedProduct = candidate
+      ? {
+          walmartProductId: candidate.walmart_product_id,
+          url: candidate.url,
+          title: candidate.title,
+          imageUrl: candidate.image_url
+        }
+      : {
+          walmartProductId: req.body.walmartProductId ?? null,
+          url: req.body.url ?? "",
+          title: req.body.title ?? "Approved item",
+          imageUrl: req.body.imageUrl ?? null
+        };
+    const url = approvedProduct.url;
     if (!isWalmartProductUrl(url)) {
       res.status(400).json({ error: "Choose a Walmart product page before approving this item." });
       return;
@@ -145,10 +162,10 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
     db.approveItem({
       itemId,
       candidateId,
-      walmartProductId: req.body.walmartProductId ?? candidate?.walmart_product_id ?? null,
+      walmartProductId: approvedProduct.walmartProductId,
       url,
-      title: req.body.title ?? candidate?.title ?? "Approved item",
-      imageUrl: req.body.imageUrl ?? candidate?.image_url ?? null,
+      title: approvedProduct.title,
+      imageUrl: approvedProduct.imageUrl,
       chosenBy: "dashboard"
     });
     if (config && logger) {

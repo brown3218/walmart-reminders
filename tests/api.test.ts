@@ -120,6 +120,64 @@ describe("dashboard API", () => {
     }
   });
 
+  it("ignores spoofed browser product details when approving a stored candidate", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-candidate-spoof",
+      listId: "walmart-list",
+      title: "yogurt",
+      notes: null,
+      completed: false
+    });
+    const item = db.listItems()[0];
+    db.replaceCandidates(Number(item.id), [
+      {
+        walmartProductId: "yogurt-123",
+        title: "Great Value Plain Yogurt",
+        url: "https://www.walmart.com/ip/yogurt/123",
+        priceText: "$3.24",
+        sizeText: "32 oz",
+        availabilityText: "Pickup",
+        imageUrl: "https://example.test/yogurt.jpg",
+        confidence: 0.82,
+        source: "reorder"
+      }
+    ]);
+    const candidateId = Number(db.listItems()[0].candidate_id);
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/items/${item.id}/approve`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-dashboard-pin": "1234"
+        },
+        body: JSON.stringify({
+          candidateId,
+          walmartProductId: "spoofed-product",
+          title: "Spoofed Product",
+          url: "https://www.walmart.com/ip/spoofed/999",
+          imageUrl: "https://example.test/spoofed.jpg"
+        })
+      });
+      expect(response.status).toBe(202);
+
+      expect(db.getChosenProduct(Number(item.id))).toMatchObject({
+        walmart_product_id: "yogurt-123",
+        title: "Great Value Plain Yogurt",
+        url: "https://www.walmart.com/ip/yogurt/123",
+        image_url: "https://example.test/yogurt.jpg"
+      });
+    } finally {
+      server.close();
+    }
+  });
+
   it("refuses to approve generic Walmart search pages for cart automation", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({
