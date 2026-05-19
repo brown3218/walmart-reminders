@@ -305,6 +305,55 @@ describe("dashboard API", () => {
     }
   });
 
+  it("chooses the current candidate when marking a proposed item manually added", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-manual-candidate",
+      listId: "walmart-list",
+      title: "yogurt",
+      notes: null,
+      completed: false
+    });
+    const item = db.listItems()[0];
+    db.replaceCandidates(Number(item.id), [
+      {
+        walmartProductId: "yogurt-123",
+        title: "Great Value Plain Yogurt",
+        url: "https://www.walmart.com/ip/yogurt/123",
+        priceText: "$3.24",
+        sizeText: "32 oz",
+        availabilityText: "Pickup",
+        imageUrl: "https://example.test/yogurt.jpg",
+        confidence: 0.8,
+        source: "reorder"
+      }
+    ]);
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/items/${item.id}/mark-added`, {
+        method: "POST",
+        headers: { "x-dashboard-pin": "1234" }
+      });
+      expect(response.status).toBe(202);
+
+      expect(db.getChosenProduct(Number(item.id))).toMatchObject({
+        walmart_product_id: "yogurt-123",
+        title: "Great Value Plain Yogurt",
+        url: "https://www.walmart.com/ip/yogurt/123",
+        image_url: "https://example.test/yogurt.jpg",
+        chosen_by: "manual"
+      });
+      expect(db.listItems()[0]).toMatchObject({ status: "added_to_cart", cart_status: "added" });
+    } finally {
+      server.close();
+    }
+  });
+
   it("supports sync, retry, mark ordered, delete, and search endpoints without live Walmart by reporting configured status", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({

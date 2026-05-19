@@ -204,7 +204,9 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
   });
 
   app.post("/api/items/:id/mark-added", requirePin(dashboardPin), (req, res) => {
-    db.markItemAdded(Number(req.params.id), "Marked added manually from dashboard.");
+    const itemId = Number(req.params.id);
+    approveBestCandidateForManualAdd(db, itemId);
+    db.markItemAdded(itemId, "Marked added manually from dashboard.");
     res.status(202).json({ ok: true });
   });
 
@@ -293,4 +295,31 @@ function enqueueReminderDrivenCartRemovals(db: AppDatabase, config: AppConfig, l
 
 function cartRemovalTarget(removal: DashboardDeletion): { title: string; url: string | null } | undefined {
   return removal.productTitle ? { title: removal.productTitle, url: removal.productUrl ?? null } : undefined;
+}
+
+function approveBestCandidateForManualAdd(db: AppDatabase, itemId: number): void {
+  if (db.getChosenProduct(itemId)) return;
+  const candidate = db.raw
+    .prepare(
+      `
+      select id, walmart_product_id, title, url, image_url
+      from product_candidates
+      where grocery_item_id = ?
+      order by confidence desc, id asc
+      limit 1
+    `
+    )
+    .get(itemId) as
+    | { id: number; walmart_product_id: string | null; title: string; url: string; image_url: string | null }
+    | undefined;
+  if (!candidate || !isWalmartProductUrl(candidate.url)) return;
+  db.approveItem({
+    itemId,
+    candidateId: candidate.id,
+    walmartProductId: candidate.walmart_product_id,
+    url: candidate.url,
+    title: candidate.title,
+    imageUrl: candidate.image_url,
+    chosenBy: "manual"
+  });
 }
