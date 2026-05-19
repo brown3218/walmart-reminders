@@ -514,6 +514,13 @@ export function createDatabase(path: string): AppDatabase {
 	        .prepare("select raw_text, normalized_text from grocery_items where id = ?")
 	        .get(input.itemId) as { raw_text: string; normalized_text: string } | undefined;
 	      if (!item) throw new Error("No approvable grocery item found.");
+	      const candidate = input.candidateId
+	        ? (raw
+	            .prepare("select walmart_product_id, image_url from product_candidates where id = ? and grocery_item_id = ?")
+	            .get(input.candidateId, input.itemId) as { walmart_product_id: string | null; image_url: string | null } | undefined)
+	        : undefined;
+	      const walmartProductId = input.walmartProductId ?? candidate?.walmart_product_id ?? null;
+	      const imageUrl = input.imageUrl ?? candidate?.image_url ?? null;
 	      const result = raw
 	        .prepare(
 	          `
@@ -542,10 +549,10 @@ export function createDatabase(path: string): AppDatabase {
 	          chosen_at = excluded.chosen_at
 	      `
 	      ).run({
-	        candidateId: input.candidateId ?? null,
-	        walmartProductId: input.walmartProductId ?? null,
-	        imageUrl: input.imageUrl ?? null,
 	        ...input,
+	        candidateId: input.candidateId ?? null,
+	        walmartProductId,
+	        imageUrl,
 	        now
 	      });
 	      raw.prepare(
@@ -563,7 +570,7 @@ export function createDatabase(path: string): AppDatabase {
 	      `
 	      ).run({
 	        phrase: item.normalized_text,
-	        walmartProductId: input.walmartProductId ?? null,
+	        walmartProductId,
 	        url: input.url,
 	        title: input.title,
 	        now

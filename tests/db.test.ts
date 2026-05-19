@@ -70,6 +70,7 @@ describe("database reminder ingestion", () => {
       {
         title: "Hidden Valley Ranch Mix",
         url: "https://www.walmart.com/ip/ranch",
+        walmartProductId: "ranch-123",
         priceText: "$2.48",
         sizeText: "1 oz",
         availabilityText: "Pickup",
@@ -87,15 +88,18 @@ describe("database reminder ingestion", () => {
     db.approveItem({
       itemId: Number(item.id),
       candidateId: Number(withCandidate.candidate_id),
+      walmartProductId: null,
       url: String(withCandidate.candidate_url),
       title: String(withCandidate.candidate_title),
+      imageUrl: null,
       chosenBy: "dashboard"
     });
 
     const chosen = db.getChosenProduct(Number(item.id));
     expect(chosen).toMatchObject({
       url: "https://www.walmart.com/ip/ranch",
-      title: "Hidden Valley Ranch Mix"
+      title: "Hidden Valley Ranch Mix",
+      walmart_product_id: "ranch-123"
     });
   });
 });
