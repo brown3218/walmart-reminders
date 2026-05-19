@@ -3,6 +3,7 @@ import type { AppDatabase } from "../db/database.js";
 import { resolveProjectPath, type AppConfig } from "../config/config.js";
 import { addApprovedItemToCart } from "./addToCart.js";
 import { removeApprovedItemFromCart } from "./removeFromCart.js";
+import { isWalmartProductUrl } from "./urls.js";
 
 let addQueue = Promise.resolve();
 let removeQueue = Promise.resolve();
@@ -37,7 +38,7 @@ export async function addMatchedItemToWalmart(
 ): Promise<void> {
   const chosen = db.getChosenProduct(itemId);
   const url = String(chosen?.url ?? "");
-  if (!url.startsWith("https://www.walmart.com/")) {
+  if (!isWalmartProductUrl(url)) {
     db.markItemFailed(itemId, "No Walmart product URL is selected yet.");
     return;
   }

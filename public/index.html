@@ -101,6 +101,10 @@
         background: #fff0ed;
         color: var(--bad);
       }
+      .action:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
       .toolbar {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -498,6 +502,7 @@
       window.openProposal = (id) => {
         currentItem = items.find((item) => Number(item.id) === Number(id));
         if (!currentItem) currentItem = { id };
+        const canApprove = isWalmartProductUrl(currentItem?.candidate_url);
         document.querySelector("#modalThumb").innerHTML = thumbInner(currentItem);
         document.querySelector("#modalTitle").textContent = candidateTitle(currentItem);
         document.querySelector("#modalMeta").textContent = [currentItem.candidate_price_text, currentItem.candidate_size_text, currentItem.candidate_source].filter(Boolean).join(" · ") || currentItem.raw_text || "";
@@ -505,6 +510,7 @@
           <span class="badge ${tone(currentItem.status)}">${label(currentItem.status)}</span>
           <span class="badge">${currentItem.candidate_confidence ? Math.round(Number(currentItem.candidate_confidence) * 100) + "% confidence" : "No score"}</span>
         `;
+        document.querySelector("#approveCandidate").disabled = !canApprove;
         dialog.showModal();
       };
 
@@ -558,6 +564,15 @@
         if (item?.candidate_url) return item.candidate_url;
         if (item?.chosen_url) return item.chosen_url;
         return `https://www.walmart.com/search?q=${encodeURIComponent(item?.raw_text || "")}`;
+      }
+
+      function isWalmartProductUrl(value) {
+        try {
+          const url = new URL(value);
+          return url.hostname.replace(/^www\./, "") === "walmart.com" && url.pathname.includes("/ip/");
+        } catch {
+          return false;
+        }
       }
 
       function thumb(item) {

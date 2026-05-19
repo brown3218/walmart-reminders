@@ -67,6 +67,41 @@ describe("dashboard API", () => {
     }
   });
 
+  it("refuses to approve generic Walmart search pages for cart automation", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({
+      externalId: "reminder-search-approval",
+      listId: "walmart-list",
+      title: "milk",
+      notes: null,
+      completed: false
+    });
+
+    const item = db.listApprovals()[0];
+    const app = createApp({ db, dashboardPin: "1234" });
+    const server = app.listen(0);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing server port");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const approved = await fetch(`${baseUrl}/api/items/${item.id}/approve`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-dashboard-pin": "1234"
+        },
+        body: JSON.stringify({ url: "https://www.walmart.com/search?q=milk", title: "Search results" })
+      });
+      expect(approved.status).toBe(400);
+
+      const row = db.raw.prepare("select status from grocery_items where id = ?").get(item.id) as { status: string };
+      expect(row.status).toBe("parsed");
+    } finally {
+      server.close();
+    }
+  });
+
   it("shows matched items in dashboard history with chosen product details", async () => {
     const db = createDatabase(":memory:");
     db.upsertReminder({

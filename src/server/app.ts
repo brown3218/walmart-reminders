@@ -10,6 +10,7 @@ import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } f
 import { scrapeRecentOrders } from "../walmart/orders.js";
 import { scrapeReorderCandidates } from "../walmart/reorderCatalog.js";
 import { searchWalmartProducts } from "../walmart/search.js";
+import { isWalmartProductUrl } from "../walmart/urls.js";
 
 export type CreateAppOptions = {
   db: AppDatabase;
@@ -150,11 +151,16 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
 
   app.post("/api/items/:id/approve", requirePin(dashboardPin), (req, res) => {
     const itemId = Number(req.params.id);
+    const url = req.body.url ?? "";
+    if (!isWalmartProductUrl(url)) {
+      res.status(400).json({ error: "Choose a Walmart product page before approving this item." });
+      return;
+    }
     db.approveItem({
       itemId,
       candidateId: req.body.candidateId ? Number(req.body.candidateId) : null,
       walmartProductId: req.body.walmartProductId ?? null,
-      url: req.body.url ?? "manual-review",
+      url,
       title: req.body.title ?? "Approved item",
       imageUrl: req.body.imageUrl ?? null,
       chosenBy: "dashboard"
