@@ -20,28 +20,29 @@ end cleanText
 on run argv
   set outputLines to {}
   tell application "Reminders"
-    set targetList to missing value
+    set targetLists to {}
     repeat with listName in argv
       try
         set candidateList to list (listName as text)
-        set candidateListId to id of candidateList as text
-        set targetList to candidateList
-        exit repeat
+        set end of targetLists to candidateList
       end try
     end repeat
 
-    if targetList is missing value then
+    if (count of targetLists) is 0 then
       error "No configured Reminders list was found."
     end if
 
-    set listId to id of targetList as text
-    repeat with r in reminders of targetList
-      if completed of r is false then
-        set rid to id of r as text
-        set titleText to my cleanText(name of r)
-        set noteText to my cleanText(body of r)
-        set end of outputLines to rid & tab & listId & tab & titleText & tab & noteText & tab & "false"
-      end if
+    repeat with targetList in targetLists
+      set listId to id of targetList as text
+      set listName to name of targetList as text
+      repeat with r in reminders of targetList
+        if completed of r is false then
+          set rid to id of r as text
+          set titleText to my cleanText(name of r)
+          set noteText to my cleanText(body of r)
+          set end of outputLines to rid & tab & listId & tab & listName & tab & titleText & tab & noteText & tab & "false"
+        end if
+      end repeat
     end repeat
   end tell
 

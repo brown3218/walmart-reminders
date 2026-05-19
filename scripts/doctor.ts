@@ -3,8 +3,8 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { loadConfig, resolveProjectPath } from "../src/config/config.js";
 import { createDatabase } from "../src/db/database.js";
-import { REMINDERS_HELPER_TIMEOUT_MS, buildReminderHelperArgs } from "../src/doctor/reminders.js";
 import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "../src/network/urls.js";
+import { REMINDERS_HELPER_TIMEOUT_MS, buildReadReminderArgs } from "../src/reminders/helper.js";
 
 type Check = {
   name: string;
@@ -40,7 +40,7 @@ try {
 }
 
 try {
-  execFileSync("osascript", buildReminderHelperArgs("./scripts/read-reminders.applescript", config.reminders.listNames), {
+  execFileSync("osascript", buildReadReminderArgs("./scripts/read-reminders.applescript", config.reminders.listNames), {
     cwd: process.cwd(),
     timeout: REMINDERS_HELPER_TIMEOUT_MS,
     maxBuffer: 1024 * 256

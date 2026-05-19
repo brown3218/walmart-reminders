@@ -57,11 +57,18 @@ export function parseReminderTsvLines(stdout: string): ReminderInput[] {
 
   for (const line of stdout.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    const [externalId, listId, title, notes = "", completed = "false"] = line.split("\t");
+    const parts = line.split("\t");
+    const hasListName = parts.length >= 6;
+    const [externalId, listId] = parts;
+    const listName = hasListName ? parts[2] : null;
+    const title = hasListName ? parts[3] : parts[2];
+    const notes = (hasListName ? parts[4] : parts[3]) ?? "";
+    const completed = (hasListName ? parts[5] : parts[4]) ?? "false";
     if (!externalId || !listId || !title) continue;
     reminders.push({
       externalId,
       listId,
+      listName,
       title,
       notes: notes || null,
       completed: completed === "true"

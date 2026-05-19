@@ -4,6 +4,7 @@ import type pino from "pino";
 import type { AppConfig } from "../config/config.js";
 import type { AppDatabase } from "../db/database.js";
 import { parseReminderTsvLines } from "./ingest.js";
+import { REMINDERS_HELPER_TIMEOUT_MS, buildReadReminderArgs } from "./helper.js";
 import { applyReminderSnapshot } from "./snapshot.js";
 
 const execFileAsync = promisify(execFile);
@@ -31,9 +32,9 @@ export function startReminderPoller({ db, config, logger, afterPoll }: ReminderP
 }
 
 export async function pollRemindersOnce(db: AppDatabase, config: AppConfig): Promise<{ ingested: number; skipped: number }> {
-  const { stdout } = await execFileAsync("osascript", ["./scripts/read-reminders.applescript", ...config.reminders.listNames], {
+  const { stdout } = await execFileAsync("osascript", buildReadReminderArgs("./scripts/read-reminders.applescript", config.reminders.listNames), {
     cwd: process.cwd(),
-    timeout: 30000,
+    timeout: REMINDERS_HELPER_TIMEOUT_MS,
     maxBuffer: 1024 * 1024
   });
   const reminders = parseReminderTsvLines(stdout);

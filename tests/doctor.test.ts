@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { REMINDERS_HELPER_TIMEOUT_MS, buildReminderHelperArgs } from "../src/doctor/reminders.js";
+import { REMINDERS_HELPER_TIMEOUT_MS, buildReadReminderArgs } from "../src/reminders/helper.js";
 
 describe("doctor reminders helper", () => {
   it("checks every configured reminder list", () => {
-    expect(buildReminderHelperArgs("./scripts/read-reminders.applescript", [
+    expect(buildReadReminderArgs("./scripts/read-reminders.applescript", [
       "Walmart",
       "Walmart shopping",
       "Walmart shopping list"

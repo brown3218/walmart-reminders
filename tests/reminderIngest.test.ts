@@ -38,4 +38,22 @@ describe("ingestReminderTsvLines", () => {
     expect(result).toMatchObject({ ingested: 1, skipped: 1 });
     expect(db.listApprovals()[0]).toMatchObject({ raw_text: "Milk" });
   });
+
+  it("accepts list names emitted by the multi-list AppleScript reader", () => {
+    const db = createDatabase(":memory:");
+
+    const result = ingestReminderTsvLines(
+      db,
+      [
+        "x-apple-reminder://abc\tlist-1\tWalmart\tMilk\t2 percent\tfalse",
+        "x-apple-reminder://def\tlist-2\tWalmart shopping list\tYogurt\t\tfalse"
+      ].join("\n")
+    );
+
+    expect(result).toMatchObject({ ingested: 2, skipped: 0 });
+    expect(db.listReminders()).toEqual([
+      expect.objectContaining({ external_id: "x-apple-reminder://abc", list_name: "Walmart", title: "Milk" }),
+      expect.objectContaining({ external_id: "x-apple-reminder://def", list_name: "Walmart shopping list", title: "Yogurt" })
+    ]);
+  });
 });
