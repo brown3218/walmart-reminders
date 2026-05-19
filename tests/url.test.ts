@@ -19,4 +19,13 @@ describe("dashboard URL detection", () => {
       bonjour: "http://mac-mini.local:3789"
     });
   });
+
+  it("uses a Bonjour host for the HTTPS PWA URL when no LAN address is detected", () => {
+    expect(buildDashboardUrls({ port: 3789, lanAddress: null, bonjourHost: "mac-mini.local", httpsPort: 3790 })).toEqual({
+      local: "http://localhost:3789",
+      lan: null,
+      bonjour: "http://mac-mini.local:3789",
+      https: "https://mac-mini.local:3790"
+    });
+  });
 });

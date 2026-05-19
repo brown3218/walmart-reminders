@@ -50,6 +50,7 @@ export function buildDashboardUrls(input: {
     lan: input.lanAddress ? `http://${input.lanAddress}:${input.port}` : null,
     bonjour: input.bonjourHost ? `http://${input.bonjourHost}:${input.port}` : null
   };
-  if (input.httpsPort && input.lanAddress) urls.https = `https://${input.lanAddress}:${input.httpsPort}`;
+  const httpsHost = input.lanAddress ?? input.bonjourHost ?? null;
+  if (input.httpsPort && httpsHost) urls.https = `https://${httpsHost}:${input.httpsPort}`;
   return urls;
 }
