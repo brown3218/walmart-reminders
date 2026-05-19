@@ -7,6 +7,8 @@ import { buildDashboardUrls, detectBonjourHost, pickLanAddress } from "./network
 import { startReminderPoller } from "./reminders/poller.js";
 import { createApp } from "./server/app.js";
 import { enqueueAddMatchedItemToWalmart } from "./walmart/automation.js";
+import { startWalmartSyncJobs } from "./walmart/scheduler.js";
+import { runWalmartCatalogSync, runWalmartOrderSync } from "./walmart/sync.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const config = loadConfig();
@@ -26,6 +28,19 @@ startReminderPoller({
     });
     enqueueAutoMatchedItems();
     logger.info(matches, "pending reminders matched after poll");
+  }
+});
+
+startWalmartSyncJobs({
+  config,
+  logger,
+  runCatalog: async () => {
+    const result = await runWalmartCatalogSync({ db, config, logger });
+    logger.info(result, "walmart catalog sync complete");
+  },
+  runOrders: async () => {
+    const result = await runWalmartOrderSync({ db, config, logger });
+    logger.info(result, "walmart order sync complete");
   }
 });
 

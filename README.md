@@ -76,6 +76,14 @@ npm run walmart:login
 
 Log in manually, complete any verification, then close the browser window. The app reuses that local profile for future Walmart reorder/search/add attempts.
 
+The service runs Walmart catalog and recent-order sync jobs on startup and then at the configured local intervals:
+
+```yaml
+walmart:
+  catalogSyncMinutes: 60
+  orderSyncMinutes: 60
+```
+
 Manual verification policy:
 
 - Login, CAPTCHA, 2FA, robot checks, press-and-hold challenges, or security checks stop automation.

@@ -72,6 +72,10 @@ export type DashboardDeletion = {
   itemId: number;
 };
 
+export type ReconciledFulfillment = FulfilledMatch & {
+  reminder: DashboardDeletion | null;
+};
+
 export type AppDatabase = {
   raw: Database.Database;
   upsertReminder(input: ReminderInput): void;
@@ -82,7 +86,7 @@ export type AppDatabase = {
   upsertCatalogItems(items: CatalogItemInput[]): number;
   matchPendingItems(thresholds: MatchThresholds): MatchPendingResult;
   upsertOrders(orders: OrderInput[]): number;
-  reconcileOrders(): FulfilledMatch[];
+  reconcileOrders(): ReconciledFulfillment[];
   replaceCandidates(itemId: number, candidates: ProductCandidateInput[]): void;
   approveItem(input: {
     itemId: number;
@@ -461,10 +465,13 @@ export function createDatabase(path: string): AppDatabase {
 	          .prepare("select title, url, product_id as productId from walmart_order_items where order_id = ?")
 	          .all(order.id) as Array<{ title: string; url: string | null; productId: string | null }>
 	      }));
-	      const matches = findFulfilledItems(items, orders);
+	      const matches: ReconciledFulfillment[] = findFulfilledItems(items, orders).map((match) => ({
+	        ...match,
+	        reminder: null
+	      }));
 	      for (const match of matches) {
 	        this.markItemOrdered(match.itemId, `Matched Walmart order ${match.orderId}.`);
-	        this.fulfillItem(match.itemId, "order_reconciliation");
+	        match.reminder = this.fulfillItem(match.itemId, "order_reconciliation");
 	      }
 	      return matches;
 	    },

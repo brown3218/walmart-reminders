@@ -7,9 +7,8 @@ import type { AppDatabase } from "../db/database.js";
 import { applyReminderDisposition } from "../reminders/actions.js";
 import { pollRemindersOnce } from "../reminders/poller.js";
 import { enqueueAddMatchedItemToWalmart, enqueueRemoveMatchedItemFromWalmart } from "../walmart/automation.js";
-import { scrapeRecentOrders } from "../walmart/orders.js";
-import { scrapeReorderCandidates } from "../walmart/reorderCatalog.js";
 import { searchWalmartProducts } from "../walmart/search.js";
+import { runWalmartCatalogSync, runWalmartOrderSync } from "../walmart/sync.js";
 import { isWalmartProductUrl } from "../walmart/urls.js";
 
 export type CreateAppOptions = {
@@ -92,38 +91,15 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
   });
 
   app.post("/api/sync/walmart-catalog", requirePin(dashboardPin), async (_req, res) => {
-    if (!config) {
+    if (!config || !logger) {
       res.status(503).json({ error: "Walmart catalog sync is not configured in this process." });
       return;
     }
     try {
-      db.setSyncState("walmart_catalog", "running");
-      const candidates = await scrapeReorderCandidates(resolveProjectPath(config.walmart.profileDir));
-      db.upsertCatalogItems(
-        candidates.map((candidate) => ({
-          productId: null,
-          title: candidate.title,
-          normalizedTitle: candidate.normalizedTitle,
-          url: candidate.url,
-          imageUrl: candidate.imageUrl,
-          priceText: candidate.priceText,
-          sizeText: null,
-          brand: null,
-          source: "reorder"
-        }))
-      );
-      const matches = db.matchPendingItems({
-        autoAddThreshold: config.walmart.autoAddThreshold,
-        proposeThreshold: config.walmart.proposeThreshold
-      });
-      if (logger) enqueueAutoMatchedItems(db, config, logger);
-      db.setSyncState("walmart_catalog", "ok");
-      db.updateWalmartSession("ready", `Captured ${candidates.length} Walmart reorder items.`, false);
-      res.status(202).json({ ok: true, candidates: candidates.length, matches });
+      const result = await runWalmartCatalogSync({ db, config, logger });
+      res.status(202).json({ ok: true, candidates: result.candidates, matches: result.matches });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      db.setSyncState("walmart_catalog", "manual_action", message);
-      db.updateWalmartSession("needs_manual_action", message, true);
       res.status(409).json({ error: message });
     }
   });
@@ -134,16 +110,10 @@ export function createApp({ db, dashboardPin, config, logger }: CreateAppOptions
       return;
     }
     try {
-      db.setSyncState("walmart_orders", "running");
-      const orders = await scrapeRecentOrders(resolveProjectPath(config.walmart.profileDir));
-      const stored = db.upsertOrders(orders);
-      const fulfilled = db.reconcileOrders();
-      db.setSyncState("walmart_orders", "ok");
-      res.status(202).json({ ok: true, orders: stored, fulfilled });
+      const result = await runWalmartOrderSync({ db, config, logger });
+      res.status(202).json({ ok: true, orders: result.orders, fulfilled: result.fulfilled });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      db.setSyncState("walmart_orders", "manual_action", message);
-      db.updateWalmartSession("needs_manual_action", message, true);
       logger.warn({ error: message }, "walmart order sync needs manual action");
       res.status(409).json({ error: message });
     }

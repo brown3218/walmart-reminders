@@ -34,7 +34,19 @@ describe("database order reconciliation", () => {
     const result = db.reconcileOrders();
 
     expect(stored).toBe(1);
-    expect(result).toEqual([{ itemId: Number(item.id), orderId: "order-1", reason: "product_url" }]);
+    expect(result).toEqual([
+      {
+        itemId: Number(item.id),
+        orderId: "order-1",
+        reason: "product_url",
+        reminder: {
+          externalId: "r1",
+          action: "complete",
+          needsCartRemoval: false,
+          itemId: Number(item.id)
+        }
+      }
+    ]);
     expect(db.listItems()).toEqual([]);
     expect(db.listItems({ includeInactive: true })[0]).toMatchObject({ status: "fulfilled" });
   });

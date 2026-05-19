@@ -1,0 +1,78 @@
+import { describe, expect, it } from "vitest";
+import { createDatabase } from "../src/db/database.js";
+import { runWalmartCatalogSync, runWalmartOrderSync } from "../src/walmart/sync.js";
+import type { AppConfig } from "../src/config/config.js";
+
+const config = {
+  walmart: {
+    profileDir: "./var/walmart-profile",
+    autoAddThreshold: 0.99,
+    proposeThreshold: 0.45
+  }
+} as AppConfig;
+const logger = { warn: () => undefined, info: () => undefined } as never;
+
+describe("Walmart sync services", () => {
+  it("syncs catalog candidates and matches pending reminders", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({ externalId: "r1", listId: "walmart", title: "ranch mix", notes: null, completed: false });
+
+    const result = await runWalmartCatalogSync({
+      db,
+      config,
+      logger,
+      scrape: async () => [
+        {
+          title: "Hidden Valley Ranch Mix",
+          normalizedTitle: "hidden valley ranch mix",
+          url: "https://www.walmart.com/ip/ranch/123",
+          imageUrl: "https://example.test/ranch.jpg",
+          priceText: "$1.98"
+        }
+      ],
+      enqueueAdd: () => undefined
+    });
+
+    expect(result).toMatchObject({ candidates: 1, matches: { needsReview: 1 } });
+    expect(db.listItems()[0]).toMatchObject({
+      raw_text: "ranch mix",
+      status: "needs_review",
+      candidate_title: "Hidden Valley Ranch Mix"
+    });
+  });
+
+  it("syncs orders, fulfills matches, and applies reminder disposition", async () => {
+    const db = createDatabase(":memory:");
+    db.upsertReminder({ externalId: "r2", listId: "walmart", title: "eggs", notes: null, completed: false });
+    const item = db.listItems()[0];
+    db.approveItem({
+      itemId: Number(item.id),
+      url: "https://www.walmart.com/ip/eggs/123",
+      title: "Great Value Large White Eggs, 18 Count",
+      chosenBy: "dashboard"
+    });
+    db.markItemAdded(Number(item.id), "Added from test.");
+    const dispositions: string[] = [];
+
+    const result = await runWalmartOrderSync({
+      db,
+      config,
+      logger,
+      scrape: async () => [
+        {
+          orderId: "order-2",
+          placedAt: "2026-05-19T10:00:00.000Z",
+          status: "placed",
+          items: [{ title: "Great Value Large White Eggs 18 Count", url: "https://www.walmart.com/ip/eggs/123" }]
+        }
+      ],
+      applyReminderDispositions: async ({ fulfilled }) => {
+        dispositions.push(...fulfilled.map((match) => match.reminder?.externalId).filter(Boolean) as string[]);
+      }
+    });
+
+    expect(result).toMatchObject({ orders: 1, fulfilled: [{ itemId: Number(item.id), orderId: "order-2" }] });
+    expect(dispositions).toEqual(["r2"]);
+    expect(db.listItems()).toEqual([]);
+  });
+});
